@@ -1,0 +1,24 @@
+import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types.js';
+export interface CapacitorAdapterOptions {
+    database?: string;
+    enableWal?: boolean;
+}
+export declare class CapacitorSqliteAdapter implements StorageAdapter {
+    private readonly options;
+    readonly kind = "capacitor-sqlite";
+    readonly capabilities: ReadonlySet<StorageCapability>;
+    private plugin;
+    private connection;
+    private dbName;
+    constructor(options?: CapacitorAdapterOptions);
+    open(options?: StorageOpenOptions): Promise<void>;
+    run(statement: string, parameters?: StorageParameters): Promise<StorageRunResult>;
+    get<T>(statement: string, parameters?: StorageParameters): Promise<T | null>;
+    all<T>(statement: string, parameters?: StorageParameters): Promise<T[]>;
+    exec(script: string): Promise<void>;
+    transaction<T>(fn: (trx: StorageAdapter) => Promise<T>): Promise<T>;
+    close(): Promise<void>;
+    private ensureConnection;
+}
+export declare const createCapacitorSqliteAdapter: (options?: CapacitorAdapterOptions) => StorageAdapter;
+//# sourceMappingURL=capacitorSqliteAdapter.d.ts.map
