@@ -1,12 +1,11 @@
 ﻿import path from 'path';
 import type { StorageAdapter, StorageAdapterFactory, StorageOpenOptions } from './types.js';
 import { StorageResolutionError } from './types.js';
+import type { AdapterKind } from './types/context.js';
 import { createBetterSqliteAdapter } from './adapters/betterSqliteAdapter.js';
 import { createSqlJsAdapter } from './adapters/sqlJsAdapter.js';
 import { createCapacitorSqliteAdapter, type CapacitorAdapterOptions } from './adapters/capacitorSqliteAdapter.js';
 import { createPostgresAdapter } from './adapters/postgresAdapter.js';
-
-export type AdapterKind = 'postgres' | 'better-sqlite3' | 'capacitor' | 'sqljs';
 
 export interface StorageResolutionOptions {
   /** Absolute path for sqlite file (used by better-sqlite3/sql.js when persistence is desired). */

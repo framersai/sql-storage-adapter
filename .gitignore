@@ -7,8 +7,11 @@ yarn.lock
 # Build output
 dist/
 *.tsbuildinfo
-*.d.ts.map
-*.js.map
+
+# Don't commit built files from src/ (should only be in dist/)
+src/**/*.js
+src/**/*.d.ts
+src/**/*.js.map
 
 # IDE
 .vscode/
