@@ -20,10 +20,17 @@
   "scripts": {
     "clean": "rimraf dist tsconfig.build.tsbuildinfo",
     "build": "npm run clean && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
+    "prepublishOnly": "npm run build && npm run test",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "dev:test": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "coverage": "npm run test:coverage",
+    "coverage:view": "open coverage/index.html || start coverage/index.html || xdg-open coverage/index.html",
+    "docs": "typedoc --out docs src/index.ts",
+    "docs:clean": "rimraf docs",
+    "docs:serve": "npx http-server docs -p 8080 -o"
   },
   "keywords": [
     "sql",
@@ -55,19 +62,21 @@
   "homepage": "https://github.com/wearetheframers/sql-storage-adapter#readme",
   "devDependencies": {
     "@types/node": "^20.17.6",
+    "@types/pg": "^8.10.7",
+    "@vitest/coverage-v8": "^1.6.1",
     "eslint": "^9.13.0",
     "eslint-config-prettier": "^9.1.0",
     "rimraf": "^5.0.7",
     "ts-node": "^10.9.2",
     "tsc-alias": "^1.8.10",
     "tsconfig-paths": "^4.2.0",
+    "typedoc": "^0.26.11",
     "typescript": "^5.6.3",
-    "vitest": "^1.6.0",
-    "@types/pg": "^8.10.7"
+    "vitest": "^1.6.0"
   },
   "dependencies": {
-    "sql.js": "^1.11.0",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "sql.js": "^1.11.0"
   },
   "peerDependencies": {
     "@capacitor-community/sqlite": "^6.0.0",

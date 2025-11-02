@@ -12,18 +12,24 @@ tsconfig*.json
 .eslintrc*
 .prettierrc*
 vitest.config.*
+typedoc.json
 *.test.ts
 *.spec.ts
+tests/
 __tests__/
 coverage/
 .nyc_output/
 
 # Documentation source
 docs/
+CONTRIBUTING.md
 
 # Version control
 .git/
 .gitignore
+
+# CI/CD
+.github/
 
 # Editor files
 .vscode/
