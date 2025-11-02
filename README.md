@@ -7,7 +7,7 @@
 
 > One SQL interface for Node.js, browsers, and mobile apps. Write your database code once, run it anywhere.
 
-**[Documentation](https://wearetheframers.github.io/sql-storage-adapter/)** | **[GitHub](https://github.com/wearetheframers/sql-storage-adapter)**
+**[Documentation](https://wearetheframers.github.io/sql-storage-adapter/)** | **[GitHub](https://github.com/wearetheframers/sql-storage-adapter)** | **[Frame.dev](https://frame.dev)**
 
 ## Why?
 
@@ -1230,8 +1230,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## License
 
-MIT © [The Framers](https://github.com/wearetheframers)
-
----
-
-Built with ❤️ for developers who want to write database code once and run it everywhere.
+MIT © [The Framers](https://frame.dev)
