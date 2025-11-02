@@ -57,7 +57,7 @@ export class SqlJsAdapter implements StorageAdapter {
   }
 
   public async run(statement: string, parameters?: StorageParameters): Promise<StorageRunResult> {
-    const stmt = this.prepare(statement);
+    const stmt = this.prepareInternal(statement);
     try {
       const { named, positional } = normaliseParameters(parameters);
       if (named) {
@@ -79,7 +79,7 @@ export class SqlJsAdapter implements StorageAdapter {
   }
 
   public async all<T>(statement: string, parameters?: StorageParameters): Promise<T[]> {
-    const stmt = this.prepare(statement);
+    const stmt = this.prepareInternal(statement);
     try {
       const { named, positional } = normaliseParameters(parameters);
       if (named) {
@@ -130,7 +130,7 @@ export class SqlJsAdapter implements StorageAdapter {
     }
   }
 
-  private prepare(statement: string) {
+  private prepareInternal(statement: string) {
     this.ensureOpen();
     return this.db!.prepare(statement);
   }

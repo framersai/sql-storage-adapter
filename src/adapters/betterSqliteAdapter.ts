@@ -93,21 +93,21 @@ export class BetterSqliteAdapter implements StorageAdapter {
   }
 
   public async run(statement: string, parameters?: StorageParameters): Promise<StorageRunResult> {
-    const stmt = this.prepare(statement);
+    const stmt = this.prepareInternal(statement);
     const { named, positional } = normaliseParameters(parameters);
     const result = named ? stmt.run(named) : stmt.run(positional ?? []);
     return { changes: result.changes, lastInsertRowid: result.lastInsertRowid };
   }
 
-  public async get<T>(statement: string, parameters?: StorageParameters): Promise<T | null> {
-    const stmt = this.prepare(statement);
+  public async get<T = unknown>(statement: string, parameters?: StorageParameters): Promise<T | null> {
+    const stmt = this.prepareInternal(statement);
     const { named, positional } = normaliseParameters(parameters);
     const row = named ? stmt.get(named) : stmt.get(positional ?? []);
     return (row as T) ?? null;
   }
 
   public async all<T>(statement: string, parameters?: StorageParameters): Promise<T[]> {
-    const stmt = this.prepare(statement);
+    const stmt = this.prepareInternal(statement);
     const { named, positional } = normaliseParameters(parameters);
     const rows = named ? stmt.all(named) : stmt.all(positional ?? []);
     return rows as T[];
@@ -155,7 +155,7 @@ export class BetterSqliteAdapter implements StorageAdapter {
     const transaction = this.db!.transaction(() => {
       operations.forEach((op, index) => {
         try {
-          const stmt = this.prepare(op.statement);
+          const stmt = this.prepareInternal(op.statement);
           const { named, positional } = normaliseParameters(op.parameters);
           const result = named ? stmt.run(named) : stmt.run(positional ?? []);
           results.push({
@@ -190,7 +190,7 @@ export class BetterSqliteAdapter implements StorageAdapter {
     return { successful, failed, results, errors };
   }
 
-  private prepare(statement: string): BetterSqliteStatement {
+  private prepareInternal(statement: string): BetterSqliteStatement {
     this.ensureOpen();
 
     // Cache prepared statements for reuse
