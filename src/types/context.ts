@@ -6,8 +6,8 @@
  * developers to manually check capability flags.
  */
 
-import type { StorageAdapter, StorageCapability } from '../types.js';
-import type { PerformanceMetrics } from './extensions.js';
+import type { StorageAdapter, StorageCapability } from '../types';
+import type { PerformanceMetrics } from './extensions';
 
 /**
  * Type of database connection.

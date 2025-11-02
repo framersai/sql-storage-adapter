@@ -5,8 +5,8 @@
  * for logging, monitoring, debugging, and analytics purposes.
  */
 
-import type { StorageParameters } from '../types.js';
-import type { AdapterContext } from './context.js';
+import type { StorageParameters } from '../types';
+import type { AdapterContext } from './context';
 
 /**
  * Event emitted when a connection is opened.

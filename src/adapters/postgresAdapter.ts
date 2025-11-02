@@ -1,6 +1,41 @@
-﻿import { Pool, PoolClient } from 'pg';
-import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types.js';
-import { normaliseParameters } from '../utils/parameterUtils.js';
+﻿import { Pool, PoolClient, PoolConfig } from 'pg';
+import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types';
+import { normaliseParameters } from '../utils/parameterUtils';
+
+/**
+ * Configuration options for PostgreSQL adapter.
+ * Supports both connection strings and granular configuration.
+ */
+export interface PostgresAdapterOptions {
+  /** PostgreSQL connection string (e.g., 'postgresql://user:pass@host:5432/dbname') */
+  connectionString?: string;
+  /** Host name or IP address (default: localhost) */
+  host?: string;
+  /** Port number (default: 5432) */
+  port?: number;
+  /** Database name */
+  database?: string;
+  /** Username for authentication */
+  user?: string;
+  /** Password for authentication */
+  password?: string;
+  /** Enable SSL/TLS connection (recommended for remote) */
+  ssl?: boolean | { rejectUnauthorized?: boolean; ca?: string; cert?: string; key?: string };
+  /** Connection pool size (default: 10) */
+  max?: number;
+  /** Minimum pool size (default: 0) */
+  min?: number;
+  /** Idle timeout in ms (default: 10000) */
+  idleTimeoutMillis?: number;
+  /** Connection timeout in ms (default: 0 = no timeout) */
+  connectionTimeoutMillis?: number;
+  /** Application name for connection tracking */
+  application_name?: string;
+  /** Statement timeout in ms (0 = no timeout) */
+  statement_timeout?: number;
+  /** Query timeout in ms (0 = no timeout) */
+  query_timeout?: number;
+}
 
 interface PreparedStatement {
   text: string;
@@ -62,6 +97,7 @@ const splitStatements = (script: string): string[] =>
  * - Native JSON/JSONB support
  * - Robust replication and backup options
  * - Battle-tested in production environments
+ * - Secure remote connections with SSL/TLS
  *
  * ## Limitations
  * - Requires separate server process
@@ -73,7 +109,73 @@ const splitStatements = (script: string): string[] =>
  * - Production web applications
  * - Multi-user systems
  * - When you need advanced SQL features
- * - Cloud deployments
+ * - Cloud deployments (AWS RDS, Heroku, Supabase, etc.)
+ * - Remote database access
+ *
+ * ## Remote Connection Examples
+ * 
+ * ### Connection String (Recommended)
+ * ```typescript
+ * const db = createPostgresAdapter({
+ *   connectionString: 'postgresql://user:password@db.example.com:5432/mydb?sslmode=require'
+ * });
+ * ```
+ * 
+ * ### Granular Configuration
+ * ```typescript
+ * const db = createPostgresAdapter({
+ *   host: 'db.example.com',
+ *   port: 5432,
+ *   database: 'mydb',
+ *   user: 'dbuser',
+ *   password: 'secure_password',
+ *   ssl: true,  // Enable SSL for security
+ *   max: 20,    // Connection pool size
+ *   statement_timeout: 30000  // 30 second timeout
+ * });
+ * ```
+ * 
+ * ### Cloud Provider Examples
+ * 
+ * #### AWS RDS
+ * ```typescript
+ * const db = createPostgresAdapter({
+ *   host: 'mydb.abc123.us-east-1.rds.amazonaws.com',
+ *   port: 5432,
+ *   database: 'postgres',
+ *   user: 'admin',
+ *   password: process.env.RDS_PASSWORD,
+ *   ssl: { rejectUnauthorized: true }
+ * });
+ * ```
+ * 
+ * #### Heroku Postgres
+ * ```typescript
+ * const db = createPostgresAdapter({
+ *   connectionString: process.env.DATABASE_URL,
+ *   ssl: { rejectUnauthorized: false }  // Heroku uses self-signed certs
+ * });
+ * ```
+ * 
+ * #### Supabase
+ * ```typescript
+ * const db = createPostgresAdapter({
+ *   connectionString: process.env.SUPABASE_DB_URL,
+ *   ssl: true
+ * });
+ * ```
+ * 
+ * #### DigitalOcean Managed Database
+ * ```typescript
+ * const db = createPostgresAdapter({
+ *   host: 'db-postgresql-nyc3-12345.ondigitalocean.com',
+ *   port: 25060,
+ *   database: 'defaultdb',
+ *   user: 'doadmin',
+ *   password: process.env.DO_DB_PASSWORD,
+ *   ssl: { rejectUnauthorized: true, ca: process.env.DO_CA_CERT }
+ * });
+ * ```
  *
  * ## Graceful Degradation
  * - Automatic reconnection on connection loss
@@ -92,23 +194,66 @@ export class PostgresAdapter implements StorageAdapter {
     'prepared'       // Prepared statements for security/performance
   ]);
 
-  private connectionString: string;
+  private options: PostgresAdapterOptions;
   private pool: Pool | null = null;
   private transactionalClient: PoolClient | null = null;
 
-  constructor(connectionString: string) {
-    this.connectionString = connectionString;
+  constructor(options: PostgresAdapterOptions | string) {
+    // Support both string and object initialization
+    if (typeof options === 'string') {
+      this.options = { connectionString: options };
+    } else {
+      this.options = options;
+    }
   }
 
-  public async open(options?: StorageOpenOptions): Promise<void> {
+  public async open(openOptions?: StorageOpenOptions): Promise<void> {
     if (this.pool) {
       return;
     }
-    const connectionString = options?.connectionString ?? this.connectionString;
-    if (!connectionString) {
-      throw new Error('Postgres adapter requires a connection string.');
+
+    // Build pool configuration
+    const poolConfig: PoolConfig = {};
+
+    // Use connection string if provided
+    if (this.options.connectionString || openOptions?.connectionString) {
+      poolConfig.connectionString = openOptions?.connectionString ?? this.options.connectionString;
+    } else {
+      // Build from individual options
+      poolConfig.host = this.options.host ?? 'localhost';
+      poolConfig.port = this.options.port ?? 5432;
+      poolConfig.database = this.options.database;
+      poolConfig.user = this.options.user;
+      poolConfig.password = this.options.password;
     }
-    this.pool = new Pool({ connectionString });
+
+    // Pool configuration
+    if (this.options.max !== undefined) poolConfig.max = this.options.max;
+    if (this.options.min !== undefined) poolConfig.min = this.options.min;
+    if (this.options.idleTimeoutMillis !== undefined) {
+      poolConfig.idleTimeoutMillis = this.options.idleTimeoutMillis;
+    }
+    if (this.options.connectionTimeoutMillis !== undefined) {
+      poolConfig.connectionTimeoutMillis = this.options.connectionTimeoutMillis;
+    }
+    if (this.options.application_name !== undefined) {
+      poolConfig.application_name = this.options.application_name;
+    }
+    if (this.options.statement_timeout !== undefined) {
+      poolConfig.statement_timeout = this.options.statement_timeout;
+    }
+    if (this.options.query_timeout !== undefined) {
+      poolConfig.query_timeout = this.options.query_timeout;
+    }
+
+    // SSL configuration
+    if (this.options.ssl !== undefined) {
+      poolConfig.ssl = this.options.ssl;
+    }
+
+    this.pool = new Pool(poolConfig);
+
+    // Test connection
     const client = await this.pool.connect();
     client.release();
   }
@@ -180,5 +325,34 @@ export class PostgresAdapter implements StorageAdapter {
   }
 }
 
-export const createPostgresAdapter = (connectionString: string): StorageAdapter => new PostgresAdapter(connectionString);
+/**
+ * Create a PostgreSQL adapter with connection string.
+ * @param connectionString - PostgreSQL connection string
+ * @example
+ * ```typescript
+ * const db = createPostgresAdapter('postgresql://user:pass@localhost:5432/mydb');
+ * ```
+ */
+export function createPostgresAdapter(connectionString: string): StorageAdapter;
 
+/**
+ * Create a PostgreSQL adapter with configuration options.
+ * @param options - PostgreSQL adapter configuration
+ * @example
+ * ```typescript
+ * const db = createPostgresAdapter({
+ *   host: 'db.example.com',
+ *   database: 'mydb',
+ *   user: 'dbuser',
+ *   password: 'secure_password',
+ *   ssl: true
+ * });
+ * ```
+ */
+export function createPostgresAdapter(options: PostgresAdapterOptions): StorageAdapter;
+
+export function createPostgresAdapter(
+  optionsOrString: PostgresAdapterOptions | string
+): StorageAdapter {
+  return new PostgresAdapter(optionsOrString);
+}

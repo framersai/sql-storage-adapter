@@ -11,7 +11,7 @@ import type {
   ConcurrencyModel,
   PersistenceModel,
   PerformanceCharacteristics
-} from './context.js';
+} from './context';
 
 /**
  * Create performance characteristics object.

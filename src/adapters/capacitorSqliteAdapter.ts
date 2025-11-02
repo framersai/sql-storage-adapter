@@ -1,5 +1,5 @@
-import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types.js';
-import { normaliseParameters } from '../utils/parameterUtils.js';
+import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types';
+import { normaliseParameters } from '../utils/parameterUtils';
 
 type CapacitorSQLitePlugin = any;
 type SQLiteDBConnection = any;

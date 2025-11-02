@@ -1,7 +1,7 @@
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import type { StorageAdapter, StorageOpenOptions, StorageParameters, StorageRunResult, StorageCapability, BatchOperation, BatchResult } from '../types.js';
-import { normaliseParameters } from '../utils/parameterUtils.js';
+import type { StorageAdapter, StorageOpenOptions, StorageParameters, StorageRunResult, StorageCapability, BatchOperation, BatchResult } from '../types';
+import { normaliseParameters } from '../utils/parameterUtils';
 
 type BetterSqliteModule = typeof import('better-sqlite3');
 type BetterSqliteDatabase = any;
@@ -219,6 +219,11 @@ export class BetterSqliteAdapter implements StorageAdapter {
  * Factory helper.
  */
 export const createBetterSqliteAdapter = (filePath: string): StorageAdapter => {
+  // Don't resolve special SQLite paths
+  if (filePath === ':memory:' || filePath.startsWith('file:')) {
+    return new BetterSqliteAdapter(filePath);
+  }
+  
   const resolved = path.isAbsolute(filePath)
     ? filePath
     : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', filePath);

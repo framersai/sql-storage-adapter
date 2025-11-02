@@ -24,6 +24,10 @@ coverage/
 docs/
 CONTRIBUTING.md
 
+# Keep user guides and examples
+!guides/
+!examples/
+
 # Version control
 .git/
 .gitignore

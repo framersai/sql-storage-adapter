@@ -3,8 +3,8 @@ import type { SqlJsStatic, SqlJsConfig, Database as SqlJsDatabase } from 'sql.js
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL, fileURLToPath } from 'url';
-import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types.js';
-import { normaliseParameters } from '../utils/parameterUtils.js';
+import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types';
+import { normaliseParameters } from '../utils/parameterUtils';
 
 type SqlJsAdapterOptions = SqlJsConfig;
 
