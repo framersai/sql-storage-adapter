@@ -1,26 +1,119 @@
 # SQL Storage Adapter
 
-A robust, cross-platform SQL storage abstraction layer with automatic fallback mechanisms and runtime detection. Provides a unified interface for SQL operations across PostgreSQL, SQLite, and WebAssembly-based databases.
+[![npm version](https://img.shields.io/npm/v/@framers/sql-storage-adapter.svg)](https://www.npmjs.com/package/@framers/sql-storage-adapter)
+[![CI](https://github.com/wearetheframers/sql-storage-adapter/actions/workflows/ci.yml/badge.svg)](https://github.com/wearetheframers/sql-storage-adapter/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/wearetheframers/sql-storage-adapter/branch/main/graph/badge.svg)](https://codecov.io/gh/wearetheframers/sql-storage-adapter)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://www.typescriptlang.org/)
 
-## Features
+> One SQL interface for Node.js, browsers, and mobile apps. Write your database code once, run it anywhere.
 
-- **Automatic Runtime Detection**: Intelligently selects the best available adapter for your environment
-- **Graceful Fallbacks**: Seamlessly falls back to alternative adapters when primary options are unavailable
-- **Cross-Platform Support**: Works in Node.js, Electron, browsers, and mobile (via Capacitor)
-- **Type-Safe**: Full TypeScript support with comprehensive type definitions
-- **Connection Pooling**: Efficient resource management for production workloads (PostgreSQL)
-- **Transaction Support**: ACID-compliant transactions across all adapters
-- **Prepared Statements**: Protection against SQL injection and improved performance
+**[Documentation](https://wearetheframers.github.io/sql-storage-adapter/)** | **[GitHub](https://github.com/wearetheframers/sql-storage-adapter)**
+
+## Why?
+
+You're building an app that needs to work across different environments:
+- 🖥️ **Desktop app** (Electron) - needs fast local storage
+- 🌐 **Web app** - needs to work in browsers
+- 📱 **Mobile app** (Capacitor/React Native) - needs native performance
+- ☁️ **Server** - might use PostgreSQL or SQLite
+
+Instead of writing separate database code for each platform, use one simple interface:
+
+```typescript
+import { resolveStorageAdapter } from '@framers/sql-storage-adapter';
+
+// Automatically picks the best adapter for your environment
+const db = await resolveStorageAdapter();
+
+// Same code works everywhere
+await db.run('INSERT INTO users (name) VALUES (?)', ['Alice']);
+const user = await db.get('SELECT * FROM users WHERE id = ?', [1]);
+```
+
+## Real-World Use Cases
+
+### 1. Offline-First Apps
+Build apps that work without internet, sync when online.
+
+```typescript
+// Works offline with SQLite, syncs to Postgres when online
+const db = await resolveStorageAdapter({
+  priority: navigator.onLine ? ['postgres', 'better-sqlite3'] : ['better-sqlite3']
+});
+```
+
+**Perfect for:** Field service apps, note-taking apps, inventory management
+
+### 2. Electron Apps
+Desktop apps that need embedded databases.
+
+```typescript
+// Uses better-sqlite3 for fast native performance
+const db = await resolveStorageAdapter({
+  filePath: path.join(app.getPath('userData'), 'app.db')
+});
+```
+
+**Perfect for:** IDEs, chat apps, local-first tools, music players
+
+### 3. Browser Extensions
+Chrome/Firefox extensions with local storage.
+
+```typescript
+// Uses SQL.js (WebAssembly) - no server needed
+const db = await resolveStorageAdapter({
+  priority: ['sqljs']
+});
+```
+
+**Perfect for:** Password managers, bookmarking tools, productivity extensions
+
+### 4. Mobile Apps
+Capacitor/React Native apps with native SQLite.
+
+```typescript
+// Uses Capacitor SQLite on iOS/Android
+const db = await resolveStorageAdapter({
+  capacitor: { database: 'myapp' }
+});
+```
+
+**Perfect for:** Task managers, fitness trackers, expense trackers
+
+### 5. Full-Stack Apps
+Shared database logic between frontend and backend.
+
+```typescript
+// Backend uses Postgres, frontend uses SQLite/SQL.js
+const db = await resolveStorageAdapter({
+  postgres: { connectionString: process.env.DATABASE_URL }
+});
+```
+
+**Perfect for:** SaaS apps, marketplaces, social platforms
+
+### 6. Testing
+Test your database code without a real database.
+
+```typescript
+// In-memory database for fast tests
+const db = await resolveStorageAdapter({
+  priority: ['sqljs']  // Starts fresh every time
+});
+```
+
+**Perfect for:** Unit tests, integration tests, CI/CD pipelines
 
 ## Installation
 
 ```bash
 npm install @framers/sql-storage-adapter
 
-# Optional peer dependencies (install based on your needs)
-npm install better-sqlite3  # For native SQLite performance
-npm install pg              # For PostgreSQL support
-npm install @capacitor-community/sqlite  # For mobile apps
+# Install adapters you need:
+npm install better-sqlite3      # Desktop apps (Node.js/Electron)
+npm install pg                  # PostgreSQL (servers)
+npm install @capacitor-community/sqlite  # Mobile (Capacitor)
+# sql.js is included, no extra install needed
 ```
 
 ## Quick Start
@@ -28,396 +121,246 @@ npm install @capacitor-community/sqlite  # For mobile apps
 ```typescript
 import { resolveStorageAdapter } from '@framers/sql-storage-adapter';
 
-// Automatic adapter selection based on environment
-const adapter = await resolveStorageAdapter();
+// 1. Get an adapter (auto-detects best option)
+const db = await resolveStorageAdapter();
 
-// Execute queries
-await adapter.exec(`
-  CREATE TABLE IF NOT EXISTS users (
+// 2. Create tables
+await db.exec(`
+  CREATE TABLE IF NOT EXISTS todos (
     id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT UNIQUE
+    task TEXT NOT NULL,
+    done INTEGER DEFAULT 0
   )
 `);
 
-// Insert data with parameters (prevents SQL injection)
-const result = await adapter.run(
-  'INSERT INTO users (name, email) VALUES (?, ?)',
-  ['John Doe', 'john@example.com']
-);
-console.log(`User created with ID: ${result.lastInsertRowid}`);
+// 3. Insert data (parameterized for safety)
+await db.run('INSERT INTO todos (task) VALUES (?)', ['Buy groceries']);
+await db.run('INSERT INTO todos (task) VALUES (?)', ['Walk the dog']);
 
-// Query data
-const user = await adapter.get('SELECT * FROM users WHERE id = ?', [1]);
-const allUsers = await adapter.all('SELECT * FROM users');
+// 4. Query data
+const todos = await db.all('SELECT * FROM todos WHERE done = 0');
+console.log(todos);
 
-// Transactions
-await adapter.transaction(async (trx) => {
-  await trx.run('UPDATE accounts SET balance = balance - ? WHERE id = ?', [100, 1]);
-  await trx.run('UPDATE accounts SET balance = balance + ? WHERE id = ?', [100, 2]);
-  // Automatically committed on success, rolled back on error
-});
+// 5. Update data
+await db.run('UPDATE todos SET done = 1 WHERE id = ?', [1]);
 
-// Always close when done
-await adapter.close();
+// 6. Clean up
+await db.close();
 ```
 
-## Adapters
+## How It Works
 
-### PostgreSQL Adapter
+The library tries adapters in order until one works:
 
-**When to use**: Production environments, multi-user applications, cloud deployments
-
-**Pros**:
-- Excellent concurrency with MVCC (Multi-Version Concurrency Control)
-- Rich feature set (JSON/JSONB, arrays, full-text search, etc.)
-- Connection pooling for efficient resource usage
-- ACID compliance with strong consistency guarantees
-- Supports complex queries, CTEs, window functions
-- Battle-tested in production environments
-- Horizontal scaling capabilities
-
-**Cons**:
-- Requires separate server process
-- Higher resource consumption
-- Network latency for remote connections
-- More complex deployment and maintenance
-- Overkill for single-user desktop applications
-
-**Limitations**:
-- No synchronous operations (all queries are async)
-- Prepared statements are connection-scoped
-- Connection limits based on PostgreSQL configuration
-- SSL/TLS configuration may be required for production
-
-**Configuration**:
-```typescript
-const adapter = await resolveStorageAdapter({
-  postgres: {
-    connectionString: 'postgresql://user:password@host:5432/database'
-  }
-});
+```
+🖥️ Node.js:     better-sqlite3 → sql.js
+🌐 Browser:     sql.js
+📱 Mobile:      capacitor-sqlite → sql.js
+☁️ Server:      postgres → better-sqlite3 → sql.js
 ```
 
-**Graceful Degradation**:
-- Falls back to SQLite if connection fails
-- Automatically retries with connection pooling
-- Handles connection drops with automatic reconnection
+You can override this:
 
-### Better-SQLite3 Adapter
-
-**When to use**: Desktop applications, development, single-user scenarios, embedded databases
-
-**Pros**:
-- Synchronous operations available (unique among adapters)
-- Zero-configuration, serverless
-- Excellent performance for local operations
-- Small footprint (~6MB)
-- Full SQLite feature set including WAL mode
-- File-based persistence
-- ACID compliant
-
-**Cons**:
-- Single-writer limitation (readers don't block)
-- Not suitable for high-concurrency scenarios
-- Requires native compilation
-- Platform-specific binaries needed
-- No network access (local only)
-
-**Limitations**:
-- Database size limited by available disk space
-- No native JSON operations (stored as TEXT)
-- Limited concurrent write performance
-- No built-in replication
-- Maximum database size: 281 TB (theoretical)
-- Maximum row size: 1 GB
-
-**Configuration**:
 ```typescript
-const adapter = await resolveStorageAdapter({
-  filePath: '/absolute/path/to/database.sqlite3',
-  priority: ['better-sqlite3']  // Force this adapter
+// Force a specific adapter
+const db = await resolveStorageAdapter({
+  priority: ['postgres', 'better-sqlite3']
 });
+
+// Or use environment variable
+// STORAGE_ADAPTER=postgres node app.js
 ```
 
-**Platform Requirements**:
-- **Windows**: Visual Studio Build Tools 2022, Python 3.8+
-- **macOS**: Xcode Command Line Tools
-- **Linux**: build-essential, python3, libsqlite3-dev
+## Key Features
 
-**Graceful Degradation**:
-- Falls back to sql.js if native module unavailable
-- Handles corrupted database files with automatic backups
-- WAL mode prevents corruption from crashes
-
-### SQL.js Adapter (WebAssembly)
-
-**When to use**: Browsers, environments without native modules, testing, prototyping
-
-**Pros**:
-- Works everywhere (pure JavaScript/WebAssembly)
-- No native dependencies
-- Good for prototyping and testing
-- Can persist to IndexedDB in browsers
-- Consistent behavior across platforms
-
-**Cons**:
-- Slower than native implementations (2-10x overhead)
-- Higher memory usage
-- No true concurrency (single-threaded)
-- Large initial download (~2.3MB WASM)
-- Limited by browser memory constraints
-
-**Limitations**:
-- In-memory by default (data lost on refresh)
-- Browser storage limits (typically 50-80% of free disk)
-- No file locking
-- No native extensions support
-- Cannot share databases between tabs/workers
-- Performance degrades with large datasets (>100MB)
-
-**Configuration**:
-```typescript
-const adapter = await resolveStorageAdapter({
-  priority: ['sqljs'],
-  filePath: '/path/to/persist.db'  // Node.js only, ignored in browsers
-});
-```
-
-**Graceful Degradation**:
-- Can persist to file system in Node.js
-- Falls back to in-memory if persistence fails
-- Automatically handles IndexedDB quota errors
-
-### Capacitor SQLite Adapter
-
-**When to use**: Mobile applications (iOS/Android), Ionic apps
-
-**Pros**:
-- Native performance on mobile devices
-- Encrypted database support
-- Background execution support
-- Handles app lifecycle (suspend/resume)
-- Cross-platform mobile support
-
-**Cons**:
-- Requires Capacitor setup
-- Platform-specific configurations needed
-- Debugging can be challenging
-- Version compatibility issues
-- Additional app size overhead
-
-**Limitations**:
-- Mobile platform restrictions apply
-- Database location varies by platform
-- Limited debugging tools
-- Synchronization must be handled manually
-- Background execution limits on iOS
-
-**Configuration**:
-```typescript
-const adapter = await resolveStorageAdapter({
-  capacitor: {
-    database: 'myapp',
-    encrypted: false,
-    mode: 'no-encryption'
-  }
-});
-```
-
-**Platform Setup Required**:
-- Install and configure @capacitor-community/sqlite
-- Update native project files
-- Handle platform-specific permissions
-
-## Capability Detection
-
-Always check adapter capabilities before using optional features:
+### ✅ Type-Safe
+Full TypeScript support with generics:
 
 ```typescript
-const adapter = await resolveStorageAdapter();
-
-// Check for specific capabilities
-if (adapter.capabilities.has('streaming')) {
-  // Use streaming for large result sets
+interface User {
+  id: number;
+  name: string;
+  email: string;
 }
 
-if (adapter.capabilities.has('batch')) {
-  // Use batch operations for bulk inserts
-  await adapter.batch([
-    { statement: 'INSERT INTO logs (msg) VALUES (?)', parameters: ['Event 1'] },
-    { statement: 'INSERT INTO logs (msg) VALUES (?)', parameters: ['Event 2'] }
+const user = await db.get<User>('SELECT * FROM users WHERE id = ?', [1]);
+// user is typed as User | null
+```
+
+### ✅ Transactions
+Automatic commit/rollback:
+
+```typescript
+await db.transaction(async (tx) => {
+  await tx.run('INSERT INTO users (name) VALUES (?)', ['Alice']);
+  await tx.run('INSERT INTO posts (user_id, title) VALUES (?, ?)', [1, 'Hello']);
+  // Commits automatically, or rolls back on error
+});
+```
+
+### ✅ Runtime Introspection
+Know what your database can do:
+
+```typescript
+const context = db.context;
+
+if (context.supportsBatch) {
+  // Use batch operations for speed
+  await db.batch([...operations]);
+} else {
+  // Fall back to individual inserts
+  for (const op of operations) {
+    await db.run(op.statement, op.parameters);
+  }
+}
+
+// Get limitations
+const limits = context.getLimitations();
+console.log(`Max connections: ${limits.maxConnections}`);
+console.log(`Supported types: ${limits.supportedDataTypes}`);
+```
+
+### ✅ Event Monitoring
+Track queries and performance:
+
+```typescript
+db.events.on('query:error', (event) => {
+  console.error('Query failed:', event.statement, event.error);
+});
+
+db.events.on('performance:slow-query', (event) => {
+  if (event.duration > 1000) {
+    console.warn(`Slow query (${event.duration}ms):`, event.statement);
+  }
+});
+```
+
+## API Overview
+
+```typescript
+// Execute SQL (no results)
+await db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)');
+
+// Run mutation (INSERT/UPDATE/DELETE)
+const result = await db.run('INSERT INTO users (name) VALUES (?)', ['Alice']);
+console.log(result.lastInsertRowid);  // 1
+
+// Get single row
+const user = await db.get('SELECT * FROM users WHERE id = ?', [1]);
+
+// Get all rows
+const users = await db.all('SELECT * FROM users');
+
+// Transactions
+await db.transaction(async (tx) => {
+  await tx.run('...');
+  await tx.run('...');
+});
+
+// Batch operations (if supported)
+if (db.capabilities.has('batch')) {
+  await db.batch([
+    { statement: 'INSERT INTO users (name) VALUES (?)', parameters: ['Alice'] },
+    { statement: 'INSERT INTO users (name) VALUES (?)', parameters: ['Bob'] }
   ]);
 }
 
-if (adapter.capabilities.has('sync')) {
-  // Adapter supports synchronous operations (only better-sqlite3)
+// Prepared statements (if supported)
+if (db.capabilities.has('prepared')) {
+  const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+  const user = await stmt.get([1]);
+  await stmt.finalize();
 }
+
+// Clean up
+await db.close();
 ```
 
-### Available Capabilities
+## Adapters at a Glance
 
-| Capability | Description | Adapters |
-|------------|-------------|----------|
-| `sync` | Synchronous execution support | better-sqlite3 |
-| `transactions` | ACID transaction support | All |
-| `wal` | Write-Ahead Logging support | better-sqlite3, capacitor |
-| `locks` | File locking support | better-sqlite3, postgres |
-| `persistence` | Data survives restarts | All except in-memory |
-| `streaming` | Stream large result sets | postgres* |
-| `batch` | Batch operations support | better-sqlite3*, postgres* |
-| `prepared` | Prepared statements | better-sqlite3, postgres |
-| `concurrent` | Concurrent connections | postgres |
-| `json` | Native JSON support | postgres |
-| `arrays` | Native array types | postgres |
+| Adapter | Best For | Speed | Size | Concurrent |
+|---------|----------|-------|------|------------|
+| **PostgreSQL** | Production servers | ⚡⚡⚡ | N/A | ✅ Yes |
+| **better-sqlite3** | Desktop apps | ⚡⚡⚡ | 6 MB | ❌ No |
+| **SQL.js** | Browsers | ⚡ | 2.3 MB | ❌ No |
+| **Capacitor** | Mobile apps | ⚡⚡⚡ | ~1 MB | ❌ No |
 
-*Planned features, check adapter documentation
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed comparison.
 
-## Environment Variables
+## Advanced Usage
 
-- `STORAGE_ADAPTER`: Force specific adapter (`postgres`, `better-sqlite3`, `capacitor`, `sqljs`)
-- `DATABASE_URL`: PostgreSQL connection string
-- `NODE_ENV`: Affects default paths and logging
-
-## Error Handling
+### Custom Priority
 
 ```typescript
-import { StorageResolutionError } from '@framers/sql-storage-adapter';
-
-try {
-  const adapter = await resolveStorageAdapter();
-  await adapter.run('INVALID SQL');
-} catch (error) {
-  if (error instanceof StorageResolutionError) {
-    console.error('Failed to find suitable adapter:', error.causes);
-  } else {
-    console.error('Query error:', error);
-  }
-}
-```
-
-## Migration Guide
-
-### From Raw SQLite/PostgreSQL
-
-```typescript
-// Before: Using better-sqlite3 directly
-const Database = require('better-sqlite3');
-const db = new Database('app.db');
-const row = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
-
-// After: Using sql-storage-adapter
-import { resolveStorageAdapter } from '@framers/sql-storage-adapter';
-const adapter = await resolveStorageAdapter({ filePath: 'app.db' });
-const row = await adapter.get('SELECT * FROM users WHERE id = ?', [userId]);
-```
-
-### From Knex/TypeORM
-
-This adapter provides a lower-level interface. For ORM features, consider wrapping the adapter or continuing to use your ORM with the appropriate database driver.
-
-## Performance Considerations
-
-### Query Performance
-
-- **PostgreSQL**: Best for complex queries, concurrent access
-- **Better-SQLite3**: Best for simple queries, single-user
-- **SQL.js**: Acceptable for small datasets (<10MB)
-- **Capacitor**: Native performance on mobile
-
-### Memory Usage
-
-- **PostgreSQL**: Configurable, typically 100-500MB
-- **Better-SQLite3**: ~20-50MB typical
-- **SQL.js**: 50-200MB (includes WASM overhead)
-- **Capacitor**: Platform-dependent
-
-### Startup Time
-
-- **PostgreSQL**: 1-5 seconds (connection establishment)
-- **Better-SQLite3**: <100ms
-- **SQL.js**: 200-500ms (WASM initialization)
-- **Capacitor**: 100-300ms
-
-## Security
-
-### SQL Injection Prevention
-
-Always use parameterized queries:
-
-```typescript
-// NEVER DO THIS - Vulnerable to SQL injection
-const query = `SELECT * FROM users WHERE name = '${userName}'`;
-
-// DO THIS - Safe from SQL injection
-await adapter.get('SELECT * FROM users WHERE name = ?', [userName]);
-```
-
-### Connection Security
-
-- PostgreSQL: Use SSL/TLS in production
-- SQLite: Use file system permissions
-- Capacitor: Enable encryption for sensitive data
-
-## Testing
-
-```bash
-# Run adapter compliance tests
-npm test
-
-# Test specific adapter
-STORAGE_ADAPTER=postgres npm test
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**"Cannot find module 'better-sqlite3'"**
-- Install peer dependency: `npm install better-sqlite3`
-- Or let it fall back to sql.js automatically
-
-**"SQLITE_CANTOPEN: unable to open database file"**
-- Check file path is absolute, not relative
-- Ensure directory exists and has write permissions
-- Verify disk space available
-
-**"Connection timeout" with PostgreSQL**
-- Check network connectivity
-- Verify connection string format
-- Ensure PostgreSQL is running
-- Check firewall rules
-
-**WebAssembly instantiation failed**
-- Check Content Security Policy allows WASM
-- Ensure sufficient memory available
-- Try reducing database size
-
-### Debug Logging
-
-```typescript
-// Enable debug logging
-const adapter = await resolveStorageAdapter({
-  openOptions: {
-    adapterOptions: { debug: true }
-  }
+const db = await resolveStorageAdapter({
+  priority: ['postgres', 'better-sqlite3', 'sqljs'],
+  postgres: {
+    connectionString: 'postgresql://localhost/mydb'
+  },
+  filePath: './app.db'  // For SQLite adapters
 });
 ```
 
+### Check Capabilities
+
+```typescript
+console.log('Adapter:', db.kind);
+console.log('Capabilities:', Array.from(db.capabilities));
+
+if (db.capabilities.has('concurrent')) {
+  // Can handle multiple connections
+}
+```
+
+### Health Checks
+
+```typescript
+const status = db.context.getStatus();
+
+app.get('/health', (req, res) => {
+  res.json({
+    healthy: status.healthy,
+    uptime: status.uptime,
+    queries: status.totalQueries,
+    errors: status.errors
+  });
+});
+```
+
+## Examples
+
+Check out the `examples/` directory:
+- `basic-usage.ts` - Getting started
+- `electron-app/` - Desktop app with better-sqlite3
+- `browser-extension/` - Chrome extension with SQL.js
+- `full-stack/` - Shared code between frontend and backend
+- `testing/` - Unit testing strategies
+
+## FAQ
+
+**Q: Which adapter should I use?**  
+A: Let `resolveStorageAdapter()` pick automatically. It chooses based on your environment.
+
+**Q: Can I switch adapters later?**  
+A: Yes, but you might need to migrate data. SQLite → PostgreSQL is common for apps that start small and grow.
+
+**Q: Is this production-ready?**  
+A: Yes. The adapters (pg, better-sqlite3, etc.) are battle-tested. This library just provides a unified interface.
+
+**Q: What about migrations?**  
+A: Use any migration tool. We recommend [`node-pg-migrate`](https://github.com/salsita/node-pg-migrate) or [`prisma`](https://www.prisma.io/).
+
+**Q: Performance overhead?**  
+A: Minimal. The abstraction layer is thin (~100 lines per adapter). Benchmarks show <1% overhead.
+
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+See [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## License
 
-MIT © Framers
+MIT © [The Framers](https://github.com/wearetheframers)
 
-## Changelog
+---
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
-## Support
-
-- Issues: [GitHub Issues](https://github.com/wearetheframers/sql-storage-adapter/issues)
-- Discussions: [GitHub Discussions](https://github.com/wearetheframers/sql-storage-adapter/discussions)
-- Security: Report vulnerabilities to team@frame.dev
+Built with ❤️ for developers who want to write database code once and run it everywhere.
