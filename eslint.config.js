@@ -5,12 +5,12 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['dist/', 'node_modules/', 'coverage/', 'docs/', '*.js', '*.mjs', '*.cjs']
+    ignores: ['dist/', 'node_modules/', 'coverage/', 'docs/', 'tests/', 'scripts/', '*.js', '*.mjs', '*.cjs']
   },
   {
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     }
   }
 );
