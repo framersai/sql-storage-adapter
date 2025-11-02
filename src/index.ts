@@ -24,5 +24,8 @@ export * from './utils/dataExport';
 export * from './utils/dataImport';
 export * from './utils/migration';
 
+// Cloud backup and scheduled backup utilities
+export * from './utils/cloudBackup';
+
 // Sync manager for offline/online hybrid databases
 export * from './utils/syncManager';

@@ -36,7 +36,7 @@
 
 import type { StorageAdapter } from '../types';
 import { createDatabase, openDatabase, connectDatabase } from '../database';
-import { exportData, type ExportedData } from './dataExport';
+import { exportData } from './dataExport';
 import { importData } from './dataImport';
 
 /**
@@ -646,7 +646,7 @@ export class SyncManager {
         this.isOnline = true;
         this.callbacks.onOnline?.();
       }
-    } catch (_error) {
+    } catch {
       if (this.isOnline) {
         this.isOnline = false;
         this.callbacks.onOffline?.();
