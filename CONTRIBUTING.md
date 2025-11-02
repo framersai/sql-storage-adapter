@@ -54,16 +54,31 @@ git clone https://github.com/wearetheframers/sql-storage-adapter.git
 cd sql-storage-adapter
 
 # Install dependencies
-pnpm install
+npm install
 
 # Build the package
-pnpm build
+npm run build
 
 # Run tests
-pnpm test
+npm test
+
+# Run tests with coverage
+npm run test:coverage
 
 # Run tests in watch mode
-pnpm dev:test
+npm run test:watch
+
+# Generate API documentation
+npm run docs
+
+# View coverage report
+npm run coverage:view
+
+# Lint code
+npm run lint
+
+# Type check
+npm run typecheck
 ```
 
 ### Testing with Different Adapters
@@ -174,11 +189,69 @@ docs: update README with Capacitor examples
 
 ## Release Process
 
-1. Update version in package.json
-2. Update CHANGELOG.md
-3. Create a pull request
-4. After merge, tag the release
-5. Publish to NPM
+Releases are automated through GitHub Actions when a new release is published:
+
+### Manual Release Steps
+
+1. **Update version** in package.json following [semantic versioning](https://semver.org/):
+   - **MAJOR**: Breaking changes (e.g., 1.0.0 → 2.0.0)
+   - **MINOR**: New features, backward compatible (e.g., 1.0.0 → 1.1.0)
+   - **PATCH**: Bug fixes, backward compatible (e.g., 1.0.0 → 1.0.1)
+
+2. **Update CHANGELOG.md** with:
+   - Version number and date
+   - Added features
+   - Changed functionality
+   - Deprecated features
+   - Removed features
+   - Fixed bugs
+   - Security updates
+
+3. **Create and merge PR**:
+   ```bash
+   git checkout -b release/v1.2.3
+   # Update version and changelog
+   git commit -m "chore: prepare release v1.2.3"
+   git push origin release/v1.2.3
+   # Create PR and merge to main
+   ```
+
+4. **Tag and publish release**:
+   ```bash
+   git checkout main
+   git pull origin main
+   git tag -a v1.2.3 -m "Release v1.2.3"
+   git push origin v1.2.3
+   ```
+
+5. **Create GitHub Release**:
+   - Go to GitHub Releases
+   - Click "Create a new release"
+   - Select the tag (v1.2.3)
+   - Add release notes from CHANGELOG
+   - Publish release
+
+6. **Automated Publishing**:
+   - GitHub Actions will automatically:
+     - Run tests
+     - Build the package
+     - Publish to NPM
+     - Deploy documentation to GitHub Pages
+     - Create release assets
+
+### Local Testing Before Release
+
+```bash
+# Build and test locally
+npm run build
+npm test
+
+# Create a tarball to inspect package contents
+npm pack
+
+# Test the package locally in another project
+npm install /path/to/framers-sql-storage-adapter-1.2.3.tgz
+```
 
 ## Getting Help
 
