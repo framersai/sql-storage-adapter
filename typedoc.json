@@ -1,0 +1,39 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["./src/index.ts"],
+  "out": "./docs",
+  "plugin": [],
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "excludeInternal": true,
+  "includeVersion": true,
+  "readme": "README.md",
+  "name": "SQL Storage Adapter",
+  "navigationLinks": {
+    "GitHub": "https://github.com/wearetheframers/sql-storage-adapter",
+    "NPM": "https://www.npmjs.com/package/@framers/sql-storage-adapter"
+  },
+  "sort": ["source-order", "required-first"],
+  "kindSortOrder": [
+    "Class",
+    "Interface",
+    "TypeAlias",
+    "Function",
+    "Variable",
+    "Enum"
+  ],
+  "categorizeByGroup": true,
+  "defaultCategory": "Other",
+  "categoryOrder": [
+    "Adapters",
+    "Types",
+    "Utilities",
+    "Errors",
+    "*"
+  ],
+  "gitRevision": "main",
+  "sourceLinkTemplate": "https://github.com/wearetheframers/sql-storage-adapter/blob/{gitRevision}/{path}#L{line}",
+  "cleanOutputDir": true,
+  "hideGenerator": false,
+  "searchInComments": true
+}
