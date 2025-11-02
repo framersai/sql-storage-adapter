@@ -4,8 +4,8 @@
  */
 
 import type { StorageAdapter } from '../types';
-import { exportData, exportAsJSON, type ExportedData } from './dataExport';
-import { importData, migrateAdapter, type ImportResult, type DataImportOptions } from './dataImport';
+import { exportData, exportAsJSON } from './dataExport';
+import { migrateAdapter, type ImportResult, type DataImportOptions } from './dataImport';
 
 /**
  * Migration strategy for handling conflicts and errors.
@@ -238,9 +238,9 @@ export async function syncAdapters(
   adapter2: StorageAdapter,
   strategy: MigrationStrategy = {}
 ): Promise<{ toAdapter2: MigrationResult; toAdapter1: MigrationResult }> {
-  // Export data from both adapters
-  const data1 = await exportData(adapter1, { tables: strategy.tables });
-  const data2 = await exportData(adapter2, { tables: strategy.tables });
+  // Export data from both adapters (unused currently, but kept for future bidirectional sync)
+  // const data1 = await exportData(adapter1, { tables: strategy.tables });
+  // const data2 = await exportData(adapter2, { tables: strategy.tables });
 
   // Find differences and sync
   const toAdapter2 = await migrateAdapters(adapter1, adapter2, {

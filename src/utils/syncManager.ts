@@ -36,8 +36,8 @@
 
 import type { StorageAdapter } from '../types';
 import { createDatabase, openDatabase, connectDatabase } from '../database';
-import { exportData, type ExportedData, type DataExportOptions } from './dataExport';
-import { importData, type DataImportOptions } from './dataImport';
+import { exportData, type ExportedData } from './dataExport';
+import { importData } from './dataImport';
 
 /**
  * Sync mode determines when synchronization occurs.
@@ -432,7 +432,7 @@ export class SyncManager {
    * Sync a single table.
    */
   private async syncTable(table: string): Promise<{ pushed: number; pulled: number; conflicts: number }> {
-    const tableConfig = this.config.tables[table] ?? {};
+    // const tableConfig = this.config.tables[table] ?? {}; // Reserved for future table-specific config
     const direction = this.config.direction;
     let pushed = 0;
     let pulled = 0;
@@ -578,8 +578,8 @@ export class SyncManager {
           case 'merge':
             // Use custom merge function if provided
             if (tableConfig?.mergeFn) {
-              const merged = tableConfig.mergeFn(localRecord, remoteRecord);
-              // Update both local and remote with merged version
+              // const merged = tableConfig.mergeFn(localRecord, remoteRecord);
+              // Update both local and remote with merged version (TODO: implement)
             }
             break;
           case 'keep-both':
@@ -646,7 +646,7 @@ export class SyncManager {
         this.isOnline = true;
         this.callbacks.onOnline?.();
       }
-    } catch (error) {
+    } catch (_error) {
       if (this.isOnline) {
         this.isOnline = false;
         this.callbacks.onOffline?.();

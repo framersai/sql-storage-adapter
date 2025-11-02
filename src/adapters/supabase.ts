@@ -402,12 +402,12 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
     }));
   }
 
-  async backup(destination: string): Promise<void> {
+  async backup(_destination: string): Promise<void> {
     // For Supabase, we can use pg_dump via command line or API
     throw new Error('Backup not implemented for Supabase adapter. Use Supabase dashboard or pg_dump.');
   }
 
-  async restore(source: string): Promise<void> {
+  async restore(_source: string): Promise<void> {
     // For Supabase, we can use pg_restore via command line or API
     throw new Error('Restore not implemented for Supabase adapter. Use Supabase dashboard or pg_restore.');
   }
