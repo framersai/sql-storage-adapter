@@ -1,17 +1,12 @@
 import initSqlJs from 'sql.js';
+import type { SqlJsStatic, SqlJsConfig, Database as SqlJsDatabase } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL, fileURLToPath } from 'url';
 import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types.js';
 import { normaliseParameters } from '../utils/parameterUtils.js';
 
-type SqlJsStatic = any;
-type SqlJsDatabase = any;
-
-type SqlJsAdapterOptions = {
-  /** Optional uri for wasm binary. */
-  locateFile?: (file: string) => string;
-};
+type SqlJsAdapterOptions = SqlJsConfig;
 
 const hasFsAccess = (): boolean => {
   try {

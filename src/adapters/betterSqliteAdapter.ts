@@ -16,12 +16,12 @@ type BetterSqliteStatement = any;
 const loadBetterSqlite = async (): Promise<BetterSqliteModule | null> => {
   try {
     // Attempt ESM import first (pnpm hoists as ESM-compatible).
-    return (await import('better-sqlite3')) as BetterSqliteModule;
+    return (await import('better-sqlite3')) as unknown as BetterSqliteModule;
   } catch {
     try {
       // Fallback to require from current file location.
       const require = (await import('module')).createRequire(pathToFileURL(__filename));
-      return require('better-sqlite3') as BetterSqliteModule;
+      return require('better-sqlite3') as unknown as BetterSqliteModule;
     } catch (error) {
       console.warn('[StorageAdapter] better-sqlite3 module not available.', error);
       return null;
@@ -87,9 +87,16 @@ export class BetterSqliteAdapter implements StorageAdapter {
       throw new Error('better-sqlite3 module is not available. Install it or choose another adapter.');
     }
 
-    const DatabaseCtor = (this.module as any).default ?? this.module;
+    // Handle ESM/CJS interop for better-sqlite3 constructor
+    let DatabaseCtor: any = this.module;
+    if ((this.module as unknown as { default?: unknown }).default) {
+      DatabaseCtor = (this.module as any).default;
+    }
     const resolvedPath = options?.filePath ?? this.defaultFilePath;
-    this.db = new DatabaseCtor(resolvedPath, options?.readOnly ? { readonly: true } : undefined);
+    this.db = new (DatabaseCtor as unknown as new (filename: string, options?: any) => any)(
+      resolvedPath,
+      options?.readOnly ? { readonly: true } : undefined
+    );
   }
 
   public async run(statement: string, parameters?: StorageParameters): Promise<StorageRunResult> {

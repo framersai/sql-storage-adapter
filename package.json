@@ -61,6 +61,7 @@
   },
   "homepage": "https://github.com/wearetheframers/sql-storage-adapter#readme",
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.17.6",
     "@types/pg": "^8.10.7",
     "@vitest/coverage-v8": "^1.6.1",
