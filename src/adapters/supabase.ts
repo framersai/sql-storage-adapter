@@ -9,12 +9,12 @@ import type {
   StorageCapability,
   StorageOpenOptions,
   StorageParameters,
-  StorageRunResult
+  StorageRunResult,
+  BatchResult
 } from '../types';
 import type {
   StorageAdapterExtensions,
-  BatchOperation,
-  BatchResult,
+  ExtendedBatchOperation,
   Migration,
   PerformanceMetrics,
   StreamOptions
@@ -38,8 +38,7 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
     'persistence',
     'locks',
     'streaming',
-    'batch',
-    'migrations'
+    'batch'
   ]);
 
   private pool?: Pool;
@@ -104,10 +103,13 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
     this.metrics.averageDuration = this.metrics.totalDuration / this.metrics.totalQueries;
 
     if (duration > 100) {
+      if (!this.metrics.slowQueries) {
+        this.metrics.slowQueries = [];
+      }
       this.metrics.slowQueries.push({
         query: query.substring(0, 200),
         duration,
-        timestamp: Date.now()
+        timestamp: new Date(Date.now())
       });
       // Keep only last 100 slow queries
       if (this.metrics.slowQueries.length > 100) {
@@ -144,10 +146,14 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
     if (this.cacheEnabled) {
       const cacheKey = this.getCacheKey(statement, parameters);
       if (this.queryCache.has(cacheKey)) {
-        this.metrics.cacheHits++;
+        if (this.metrics.cacheHits !== undefined) {
+          this.metrics.cacheHits++;
+        }
         return this.queryCache.get(cacheKey);
       }
-      this.metrics.cacheMisses++;
+      if (this.metrics.cacheMisses !== undefined) {
+        this.metrics.cacheMisses++;
+      }
     }
 
     const startTime = Date.now();
@@ -165,7 +171,9 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
         // Enforce cache size limit
         if (this.queryCache.size > this.maxCacheSize) {
           const firstKey = this.queryCache.keys().next().value;
-          this.queryCache.delete(firstKey);
+          if (firstKey !== undefined) {
+            this.queryCache.delete(firstKey);
+          }
         }
       }
 
@@ -182,10 +190,14 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
     if (this.cacheEnabled) {
       const cacheKey = this.getCacheKey(statement, parameters);
       if (this.queryCache.has(cacheKey)) {
-        this.metrics.cacheHits++;
+        if (this.metrics.cacheHits !== undefined) {
+          this.metrics.cacheHits++;
+        }
         return this.queryCache.get(cacheKey);
       }
-      this.metrics.cacheMisses++;
+      if (this.metrics.cacheMisses !== undefined) {
+        this.metrics.cacheMisses++;
+      }
     }
 
     const startTime = Date.now();
@@ -203,7 +215,9 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
         // Enforce cache size limit
         if (this.queryCache.size > this.maxCacheSize) {
           const firstKey = this.queryCache.keys().next().value;
-          this.queryCache.delete(firstKey);
+          if (firstKey !== undefined) {
+            this.queryCache.delete(firstKey);
+          }
         }
       }
 
@@ -295,13 +309,13 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
     }
   }
 
-  async batchWrite(operations: BatchOperation[]): Promise<BatchResult> {
+  async batchWrite(operations: ExtendedBatchOperation[]): Promise<BatchResult> {
     return this.transaction(async (trx) => {
       let successful = 0;
       let failed = 0;
-      const errors: Array<{ operation: BatchOperation; error: string }> = [];
+      const errors: Array<{ index: number; error: Error }> = [];
 
-      for (const op of operations) {
+      for (const [index, op] of operations.entries()) {
         try {
           switch (op.type) {
             case 'insert': {
@@ -336,7 +350,10 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
           }
         } catch (error: any) {
           failed++;
-          errors.push({ operation: op, error: error.message });
+          errors.push({ 
+            index,
+            error: error instanceof Error ? error : new Error(String(error))
+          });
         }
       }
 
