@@ -98,7 +98,7 @@ describe('CloudBackupManager', () => {
       
       const key = await manager.backup();
       
-      expect(key).toStartWith('production/');
+      expect(key).toMatch(/^production\//);
     });
 
     it('should backup specific tables only', async () => {
@@ -126,7 +126,7 @@ describe('CloudBackupManager', () => {
       
       const key = await manager.backup({ compression: 'gzip' });
       
-      expect(key).toEndWith('.json.gz');
+      expect(key).toMatch(/\.json\.gz$/);
       
       const compressed = await storage.download(key);
       expect(Buffer.isBuffer(compressed)).toBe(true);
@@ -312,7 +312,7 @@ describe('CloudBackupManager', () => {
       const key = await manager.backupNow({ format: 'json', prefix: 'manual/' });
       
       expect(key).toContain('.json');
-      expect(key).toStartWith('manual/');
+      expect(key).toMatch(/^manual\//);
     });
   });
 });
@@ -322,21 +322,30 @@ describe('S3StorageProvider', () => {
     const mockStorage = new Map<string, Buffer>();
     
     const mockS3 = {
-      putObject: async ({ Key, Body }: { Bucket: string; Key: string; Body: string | Buffer }) => {
-        mockStorage.set(Key, Buffer.from(Body));
-      },
-      getObject: async ({ Key }: { Bucket: string; Key: string }) => ({
-        Body: {
-          transformToString: async () => mockStorage.get(Key)?.toString() || ''
+      send: async (command: any) => {
+        if (command.constructor.name === 'PutObjectCommand') {
+          mockStorage.set(command.input.Key, Buffer.from(command.input.Body));
+          return {};
         }
-      }),
-      listObjectsV2: async ({ Prefix }: { Bucket: string; Prefix?: string }) => ({
-        Contents: Array.from(mockStorage.keys())
-          .filter(k => !Prefix || k.startsWith(Prefix))
-          .map(Key => ({ Key }))
-      }),
-      deleteObject: async ({ Key }: { Bucket: string; Key: string }) => {
-        mockStorage.delete(Key);
+        if (command.constructor.name === 'GetObjectCommand') {
+          return {
+            Body: {
+              transformToString: async () => mockStorage.get(command.input.Key)?.toString() || ''
+            }
+          };
+        }
+        if (command.constructor.name === 'ListObjectsV2Command') {
+          return {
+            Contents: Array.from(mockStorage.keys())
+              .filter(k => !command.input.Prefix || k.startsWith(command.input.Prefix))
+              .map(Key => ({ Key }))
+          };
+        }
+        if (command.constructor.name === 'DeleteObjectCommand') {
+          mockStorage.delete(command.input.Key);
+          return {};
+        }
+        return {};
       }
     };
     
