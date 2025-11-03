@@ -64,6 +64,7 @@
   },
   "homepage": "https://github.com/wearetheframers/sql-storage-adapter#readme",
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.709.0",
     "@eslint/js": "^9.39.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.17.6",
