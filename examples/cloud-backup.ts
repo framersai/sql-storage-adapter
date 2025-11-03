@@ -13,11 +13,11 @@
  */
 
 import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { createDatabase, createCloudBackupManager, S3StorageProvider } from '../src/index';
+import { createDatabase, createCloudBackupManager, S3StorageProvider, CloudStorageProvider } from '../src/index';
 
 // AWS S3 Example
 async function awsS3Backup() {
-  const db = await createDatabase('./app.db');
+  const db = await createDatabase({ type: 'memory' });
 
   // Configure S3 client
   const s3 = new S3Client({ 
@@ -62,7 +62,7 @@ async function awsS3Backup() {
 
 // Cloudflare R2 Example
 async function cloudflareR2Backup() {
-  const db = await createDatabase('./app.db');
+  const db = await createDatabase({ type: 'memory' });
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID!;
   
@@ -88,7 +88,7 @@ async function cloudflareR2Backup() {
 
 // MinIO Example (self-hosted S3-compatible)
 async function minIOBackup() {
-  const db = await createDatabase('./app.db');
+  const db = await createDatabase({ type: 'memory' });
 
   const minio = new S3Client({
     region: 'us-east-1', // MinIO requires a region
@@ -109,7 +109,7 @@ async function minIOBackup() {
 }
 
 // Custom Storage Provider Example
-class CustomStorageProvider implements import('../src/utils/cloudBackup').CloudStorageProvider {
+class CustomStorageProvider implements CloudStorageProvider {
   async upload(key: string, data: string | Buffer): Promise<void> {
     // Custom upload logic (e.g., HTTP POST to your API)
     const body = typeof data === 'string' ? data : data.toString('base64');
@@ -135,7 +135,7 @@ class CustomStorageProvider implements import('../src/utils/cloudBackup').CloudS
 }
 
 async function customStorageBackup() {
-  const db = await createDatabase('./app.db');
+  const db = await createDatabase({ type: 'memory' });
   
   // Use your custom storage provider
   const storage = new CustomStorageProvider();
@@ -151,7 +151,7 @@ async function customStorageBackup() {
 
 // One-time backup to S3
 async function oneTimeBackup() {
-  const db = await createDatabase({ type: 'sqlite', filename: './app.db' });
+  const db = await createDatabase({ type: 'memory' });
 
   const s3 = new S3Client({ region: 'us-east-1' });
   
