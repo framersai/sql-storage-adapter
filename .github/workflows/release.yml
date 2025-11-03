@@ -1,0 +1,112 @@
+name: Auto Release & Publish
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+
+jobs:
+  release:
+    name: Create Release & Publish to NPM
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip release]')"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential python3
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install optional dependencies
+        run: |
+          npm install better-sqlite3 --force || true
+          npm install @aws-sdk/client-s3 --force || true
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Build package
+        run: npm run build
+
+      - name: Get package version
+        id: package_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.package_version.outputs.VERSION }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Git Tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.package_version.outputs.VERSION }}" -m "Release v${{ steps.package_version.outputs.VERSION }}"
+          git push origin "v${{ steps.package_version.outputs.VERSION }}"
+
+      - name: Create GitHub Release
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.package_version.outputs.VERSION }}
+          name: v${{ steps.package_version.outputs.VERSION }}
+          body: |
+            ## í³¦ SQL Storage Adapter v${{ steps.package_version.outputs.VERSION }}
+
+            **Install:**
+            ```bash
+            npm install @framers/sql-storage-adapter@${{ steps.package_version.outputs.VERSION }}
+            ```
+
+            **Documentation:** https://wearetheframers.github.io/sql-storage-adapter/
+            **NPM Package:** https://www.npmjs.com/package/@framers/sql-storage-adapter
+
+            ### Changes
+            See [CHANGELOG.md](https://github.com/wearetheframers/sql-storage-adapter/blob/master/CHANGELOG.md) for details.
+          files: |
+            dist/**/*
+            LICENSE
+            README.md
+            CHANGELOG.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to NPM
+        if: steps.check_tag.outputs.exists == 'false'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Comment on commit
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: 'íº€ Published v${{ steps.package_version.outputs.VERSION }} to NPM!\n\ní³¦ https://www.npmjs.com/package/@framers/sql-storage-adapter\ní³š https://wearetheframers.github.io/sql-storage-adapter/'
+            })
