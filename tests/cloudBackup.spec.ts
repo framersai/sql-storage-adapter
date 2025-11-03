@@ -203,7 +203,9 @@ describe('CloudBackupManager', () => {
       const manager = new CloudBackupManager(db, storage, { interval: 0 });
       
       await manager.backup({ prefix: 'prod/' });
+      await new Promise(resolve => setTimeout(resolve, 10));
       await manager.backup({ prefix: 'dev/' });
+      await new Promise(resolve => setTimeout(resolve, 10));
       await manager.backup({ prefix: 'prod/' });
       
       const prodBackups = await manager.listBackups('prod/');
