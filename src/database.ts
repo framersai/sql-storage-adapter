@@ -122,6 +122,14 @@ export async function createDatabase(options: DatabaseOptions = {}): Promise<Sto
     if (options.type === 'memory') {
       resolverOptions.filePath = ':memory:';
     }
+
+    if (typeof window !== 'undefined') {
+      // Use `sql.js` or another browser-compatible adapter
+      resolverOptions.priority = ['sqljs'];
+    } else {
+      // Use `better-sqlite3` for Node.js environments
+      resolverOptions.priority = ['better-sqlite3'];
+    }
   }
   
   // Handle custom priority
