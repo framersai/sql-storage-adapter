@@ -184,7 +184,7 @@ const splitStatements = (script: string): string[] =>
  */
 export class PostgresAdapter implements StorageAdapter {
   public readonly kind = 'postgres';
-  public readonly capabilities: ReadonlySet<StorageCapability> = new Set([
+  public readonly capabilities: ReadonlySet<StorageCapability> = new Set<StorageCapability>([
     'transactions',  // Full ACID transaction support
     'locks',         // Row-level and advisory locks
     'persistence',   // Data persisted to disk

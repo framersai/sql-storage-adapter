@@ -2,6 +2,14 @@
  * Cloud Backup Example
  * 
  * Demonstrates automatic scheduled backups to S3, R2, or other cloud storage.
+ * 
+ * Note: This example file has TypeScript errors because dependencies are optional.
+ * The package uses:
+ * - Tree-shakable exports - unused code is removed by bundlers
+ * - Lazy loading - AWS SDK commands are imported dynamically only when used
+ * - Optional peer dependencies - install only what you need (@aws-sdk/client-s3, better-sqlite3, pg)
+ * 
+ * In production, these errors won't appear because users install the dependencies they need.
  */
 
 import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
@@ -104,9 +112,10 @@ async function minIOBackup() {
 class CustomStorageProvider implements import('../src/utils/cloudBackup').CloudStorageProvider {
   async upload(key: string, data: string | Buffer): Promise<void> {
     // Custom upload logic (e.g., HTTP POST to your API)
+    const body = typeof data === 'string' ? data : data.toString('base64');
     await fetch(`https://my-api.com/backups/${key}`, {
       method: 'POST',
-      body: data,
+      body,
     });
   }
 
@@ -142,7 +151,7 @@ async function customStorageBackup() {
 
 // One-time backup to S3
 async function oneTimeBackup() {
-  const db = await createDatabase('./app.db');
+  const db = await createDatabase({ type: 'sqlite', filename: './app.db' });
 
   const s3 = new S3Client({ region: 'us-east-1' });
   

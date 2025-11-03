@@ -29,7 +29,12 @@ const loadCapacitorSqlite = async (): Promise<CapacitorSQLitePlugin | null> => {
  */
 export class CapacitorSqliteAdapter implements StorageAdapter {
   public readonly kind = 'capacitor-sqlite';
-  public readonly capabilities: ReadonlySet<StorageCapability> = new Set(['transactions', 'wal', 'locks', 'persistence']);
+  public readonly capabilities: ReadonlySet<StorageCapability> = new Set<StorageCapability>([
+    'transactions',
+    'wal',
+    'locks',
+    'persistence'
+  ]);
 
   private plugin: CapacitorSQLitePlugin | null = null;
   private connection: SQLiteDBConnection | null = null;

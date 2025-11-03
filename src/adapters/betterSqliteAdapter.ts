@@ -55,7 +55,7 @@ const loadBetterSqlite = async (): Promise<BetterSqliteModule | null> => {
  */
 export class BetterSqliteAdapter implements StorageAdapter {
   public readonly kind = 'better-sqlite3';
-  public readonly capabilities: ReadonlySet<StorageCapability> = new Set([
+  public readonly capabilities: ReadonlySet<StorageCapability> = new Set<StorageCapability>([
     'sync',         // Unique: supports synchronous operations
     'transactions', // Full ACID transaction support
     'wal',          // Write-Ahead Logging for better concurrency

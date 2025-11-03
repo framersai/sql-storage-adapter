@@ -33,7 +33,7 @@ export interface SupabaseAdapterOptions extends StorageOpenOptions {
 
 export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions {
   readonly kind = 'supabase-postgres';
-  readonly capabilities: ReadonlySet<StorageCapability> = new Set([
+  readonly capabilities: ReadonlySet<StorageCapability> = new Set<StorageCapability>([
     'transactions',
     'persistence',
     'locks',
@@ -315,7 +315,8 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
       let failed = 0;
       const errors: Array<{ index: number; error: Error }> = [];
 
-      for (const [index, op] of operations.entries()) {
+      for (let index = 0; index < operations.length; index++) {
+        const op = operations[index];
         try {
           switch (op.type) {
             case 'insert': {
