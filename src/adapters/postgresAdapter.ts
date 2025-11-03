@@ -1,4 +1,13 @@
-﻿import { Pool, PoolClient, PoolConfig } from 'pg';
+﻿// Add at the very top, before any imports
+
+if (typeof window !== 'undefined') {
+  throw new Error(
+    '[StorageAdapter] PostgreSQL adapter is not available in browser environments. ' +
+    'Use sql.js or another browser-compatible adapter instead.'
+  );
+}
+
+import { Pool, PoolClient, PoolConfig } from 'pg';
 import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types';
 import { normaliseParameters } from '../utils/parameterUtils';
 

@@ -1,5 +1,16 @@
 import path from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
+// Conditionally import `url` module only in Node.js environments
+let fileURLToPath: (url: string) => string;
+let pathToFileURL: (path: string) => URL;
+
+if (typeof window === 'undefined') {
+  const url = await import('url');
+  fileURLToPath = url.fileURLToPath;
+  pathToFileURL = url.pathToFileURL;
+} else {
+  throw new Error('better-sqlite3 is not supported in browser environments.');
+}
+
 import type { StorageAdapter, StorageOpenOptions, StorageParameters, StorageRunResult, StorageCapability, BatchOperation, BatchResult } from '../types';
 import { normaliseParameters } from '../utils/parameterUtils';
 
