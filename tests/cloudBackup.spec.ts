@@ -115,8 +115,8 @@ describe('CloudBackupManager', () => {
       const data = await storage.download(key);
       const json = JSON.parse(data.toString());
       
-      expect(json.tables).toHaveProperty('users');
-      expect(json.tables).not.toHaveProperty('posts');
+      expect(json.data).toHaveProperty('users');
+      expect(json.data).not.toHaveProperty('posts');
     });
   });
 
@@ -189,7 +189,10 @@ describe('CloudBackupManager', () => {
       const manager = new CloudBackupManager(db, storage, { interval: 0 });
       
       await manager.backup();
+      // Small delay to ensure different timestamps
+      await new Promise(resolve => setTimeout(resolve, 10));
       await manager.backup();
+      await new Promise(resolve => setTimeout(resolve, 10));
       await manager.backup();
       
       const backups = await manager.listBackups();
@@ -233,8 +236,11 @@ describe('CloudBackupManager', () => {
       const manager = new CloudBackupManager(db, storage, { interval: 0 });
       
       await manager.backup();
+      await new Promise(resolve => setTimeout(resolve, 10));
       await manager.backup();
+      await new Promise(resolve => setTimeout(resolve, 10));
       await manager.backup();
+      await new Promise(resolve => setTimeout(resolve, 10));
       await manager.backup();
       
       const backups = await manager.listBackups();

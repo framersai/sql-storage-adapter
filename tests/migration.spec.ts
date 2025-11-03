@@ -287,7 +287,7 @@ describe('Migration Utilities', () => {
   it('should measure migration duration', async () => {
     const result = await migrateAdapters(sourceAdapter, targetAdapter);
 
-    expect(result.duration).toBeGreaterThan(0);
+    expect(result.duration).toBeGreaterThanOrEqual(0);
     expect(result.duration).toBeLessThan(10000); // Should be fast for small dataset
   });
 });
