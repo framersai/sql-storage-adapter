@@ -1,96 +1,179 @@
 /**
- * Cloud backup utilities for S3, R2, and other object storage.
- * Provides automatic scheduled backups and restore functionality.
+ * Cloud backup utilities for S3, R2, and other object storage providers.
+ * 
+ * This module provides automatic scheduled backups and restore functionality
+ * for SQL databases using S3-compatible storage (AWS S3, Cloudflare R2, MinIO, etc.).
+ * 
+ * Features:
+ * - Automatic scheduled backups with configurable intervals
+ * - Gzip compression to reduce storage costs
+ * - Retention policies (automatic cleanup of old backups)
+ * - JSON and SQL export formats
+ * - Manual backup/restore on demand
+ * 
+ * @example
+ * ```typescript
+ * import { S3Client } from '@aws-sdk/client-s3';
+ * import { createCloudBackupManager } from '@framers/sql-storage-adapter';
+ * 
+ * const s3Client = new S3Client({ region: 'us-east-1' });
+ * const manager = createCloudBackupManager(db, s3Client, 'my-backups', {
+ *   interval: 3600000,  // 1 hour
+ *   maxBackups: 24,
+ *   options: { compression: 'gzip', format: 'json' }
+ * });
+ * 
+ * manager.start();  // Auto-schedule backups
+ * await manager.backupNow();  // Manual backup
+ * await manager.restore('backups/db-2024-01-15.json.gz');
+ * ```
+ * 
+ * @module cloudBackup
  */
 
 import type { StorageAdapter } from '../types';
 import { exportAsJSON, exportAsSQL } from './dataExport';
 import { importFromJSON, importFromSQL } from './dataImport';
 
+/** Supported backup export formats */
 export type BackupFormat = 'json' | 'sql';
+
+/** Supported compression algorithms */
 export type CompressionType = 'gzip' | 'none';
 
+/**
+ * Generic interface for cloud storage providers.
+ * 
+ * Implement this interface to support custom storage backends
+ * beyond S3-compatible services.
+ */
 export interface CloudStorageProvider {
-  /** Upload data to cloud storage */
+  /**
+   * Upload data to cloud storage
+   * @param key - The storage key/path for the backup
+   * @param data - The backup data (string or Buffer)
+   */
   upload(key: string, data: string | Buffer): Promise<void>;
-  /** Download data from cloud storage */
+  
+  /**
+   * Download data from cloud storage
+   * @param key - The storage key/path to download
+   * @returns The backup data
+   */
   download(key: string): Promise<string | Buffer>;
-  /** List backups in cloud storage */
+  
+  /**
+   * List available backups in cloud storage
+   * @param prefix - Optional prefix to filter backups
+   * @returns Array of backup keys
+   */
   list(prefix?: string): Promise<string[]>;
-  /** Delete a backup */
+  
+  /**
+   * Delete a backup from cloud storage
+   * @param key - The storage key/path to delete
+   */
   delete(key: string): Promise<void>;
 }
 
+/**
+ * Configuration options for backup creation
+ */
 export interface BackupOptions {
-  /** Backup format (json or sql) */
+  /** Backup format (json or sql) - default: 'json' */
   format?: BackupFormat;
-  /** Compression type */
+  /** Compression type - default: 'gzip' */
   compression?: CompressionType;
-  /** Tables to include (undefined = all) */
+  /** Tables to include (undefined = all tables) */
   tables?: string[];
-  /** Prefix for backup keys */
+  /** Prefix for backup keys - default: 'backups/' */
   prefix?: string;
-  /** Include timestamp in key */
+  /** Include timestamp in backup key - default: true */
   includeTimestamp?: boolean;
 }
 
+/**
+ * Configuration for automatic scheduled backups
+ */
 export interface ScheduledBackupConfig {
-  /** Interval in milliseconds */
+  /** Backup interval in milliseconds (e.g., 3600000 = 1 hour) */
   interval: number;
-  /** Maximum number of backups to keep */
+  /** Maximum number of backups to keep (older backups auto-deleted) */
   maxBackups?: number;
-  /** Backup options */
+  /** Backup creation options */
   options?: BackupOptions;
-  /** Callback on successful backup */
+  /** Callback invoked on successful backup */
   onSuccess?: (key: string) => void;
-  /** Callback on error */
+  /** Callback invoked on backup error */
   onError?: (error: Error) => void;
 }
 
 /**
  * S3-compatible cloud storage provider.
- * Works with AWS S3, Cloudflare R2, MinIO, etc.
+ * 
+ * Works with AWS S3, Cloudflare R2, MinIO, and other S3-compatible services.
+ * Uses the AWS SDK v3 for S3 operations.
+ * 
+ * @example
+ * ```typescript
+ * import { S3Client } from '@aws-sdk/client-s3';
+ * 
+ * const s3Client = new S3Client({ region: 'us-east-1' });
+ * const provider = new S3StorageProvider(s3Client, 'my-bucket');
+ * 
+ * await provider.upload('backups/test.json', JSON.stringify(data));
+ * const backups = await provider.list('backups/');
+ * ```
  */
 export class S3StorageProvider implements CloudStorageProvider {
+  /**
+   * @param client - AWS SDK S3Client instance
+   * @param bucket - S3 bucket name
+   */
   constructor(
-    private client: {
-      putObject: (params: { Bucket: string; Key: string; Body: string | Buffer }) => Promise<unknown>;
-      getObject: (params: { Bucket: string; Key: string }) => Promise<{ Body: { transformToString: () => Promise<string> } }>;
-      listObjectsV2: (params: { Bucket: string; Prefix?: string }) => Promise<{ Contents?: Array<{ Key?: string }> }>;
-      deleteObject: (params: { Bucket: string; Key: string }) => Promise<unknown>;
-    },
+    private client: { send: (command: unknown) => Promise<unknown> },
     private bucket: string
   ) {}
 
   async upload(key: string, data: string | Buffer): Promise<void> {
-    await this.client.putObject({
+    const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+    await this.client.send(new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
       Body: data,
-    });
+    }));
   }
 
   async download(key: string): Promise<string> {
-    const response = await this.client.getObject({
+    const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+    const response = await this.client.send(new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
-    });
-    return await response.Body.transformToString();
+    })) as { Body: { transformToString?: () => Promise<string>; toString: (encoding: string) => string } };
+    
+    // Handle different SDK versions
+    if (response.Body.transformToString) {
+      return await response.Body.transformToString();
+    }
+    return response.Body.toString('utf-8');
   }
 
   async list(prefix?: string): Promise<string[]> {
-    const response = await this.client.listObjectsV2({
+    const { ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+    const response = await this.client.send(new ListObjectsV2Command({
       Bucket: this.bucket,
       Prefix: prefix,
-    });
-    return response.Contents?.map(obj => obj.Key).filter((key): key is string => !!key) ?? [];
+    })) as { Contents?: Array<{ Key?: string }> };
+    
+    return response.Contents?.map((obj) => obj.Key).filter((key): key is string => !!key) ?? [];
   }
 
   async delete(key: string): Promise<void> {
-    await this.client.deleteObject({
+    const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+    await this.client.send(new DeleteObjectCommand({
       Bucket: this.bucket,
       Key: key,
-    });
+    }));
   }
 }
 
@@ -256,8 +339,18 @@ export class CloudBackupManager {
 /**
  * Create a cloud backup manager with S3-compatible storage.
  * 
+ * This is the main factory function for setting up cloud backups.
+ * It creates an S3StorageProvider and CloudBackupManager configured
+ * with your database and S3-compatible storage.
+ * 
+ * @param adapter - The StorageAdapter instance to backup
+ * @param s3Client - AWS SDK S3Client (works with S3, R2, MinIO, etc.)
+ * @param bucket - The S3 bucket name
+ * @param config - Scheduled backup configuration
+ * @returns CloudBackupManager instance ready to start
+ * 
  * @example AWS S3
- * ```ts
+ * ```typescript
  * import { S3Client } from '@aws-sdk/client-s3';
  * import { createCloudBackupManager } from '@framers/sql-storage-adapter';
  * 
@@ -272,7 +365,7 @@ export class CloudBackupManager {
  * ```
  * 
  * @example Cloudflare R2
- * ```ts
+ * ```typescript
  * import { S3Client } from '@aws-sdk/client-s3';
  * 
  * const r2 = new S3Client({
@@ -292,7 +385,7 @@ export class CloudBackupManager {
  */
 export function createCloudBackupManager(
   adapter: StorageAdapter,
-  s3Client: ConstructorParameters<typeof S3StorageProvider>[0],
+  s3Client: { send: (command: unknown) => Promise<unknown> },
   bucket: string,
   config: ScheduledBackupConfig
 ): CloudBackupManager {

@@ -414,6 +414,92 @@ await restoreFromBackup(db, backupData, {
 });
 ```
 
+### Cloud Backups
+
+Automatically backup your database to S3-compatible storage (AWS S3, Cloudflare R2, MinIO) with scheduled backups, compression, and retention policies.
+
+#### AWS S3 Scheduled Backups
+
+```typescript
+import { S3Client } from '@aws-sdk/client-s3';
+import { createCloudBackupManager } from '@framers/sql-storage-adapter';
+
+const s3Client = new S3Client({
+  region: 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!
+  }
+});
+
+// Create backup manager with auto-scheduling
+const manager = createCloudBackupManager(db, s3Client, 'my-app-backups', {
+  interval: 3600000,  // Backup every hour
+  maxBackups: 24,     // Keep last 24 backups
+  options: {
+    compression: 'gzip',  // Compress to save storage costs
+    format: 'json'
+  }
+});
+
+// Start automatic backups
+manager.start();
+console.log('✅ Cloud backups running every hour');
+
+// Manual backup when needed
+await manager.backupNow();
+
+// Restore from a specific backup
+await manager.restore('backups/my-database-2024-01-15T10-30-00.json.gz');
+```
+
+#### Cloudflare R2
+
+```typescript
+import { S3Client } from '@aws-sdk/client-s3';
+
+const r2Client = new S3Client({
+  region: 'auto',
+  endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!
+  }
+});
+
+const manager = createCloudBackupManager(db, r2Client, 'my-r2-bucket', {
+  interval: 86400000,  // Daily backups
+  maxBackups: 30,      // Keep 30 days
+  options: { compression: 'gzip', format: 'json' }
+});
+
+manager.start();
+```
+
+#### Self-Hosted MinIO
+
+```typescript
+import { S3Client } from '@aws-sdk/client-s3';
+
+const minioClient = new S3Client({
+  region: 'us-east-1',
+  endpoint: 'http://localhost:9000',
+  credentials: {
+    accessKeyId: 'minioadmin',
+    secretAccessKey: 'minioadmin'
+  },
+  forcePathStyle: true  // Required for MinIO
+});
+
+const manager = createCloudBackupManager(db, minioClient, 'backups', {
+  interval: 3600000,
+  maxBackups: 48,
+  options: { compression: 'gzip', format: 'sql' }  // SQL format supported
+});
+
+manager.start();
+```
+
 ### Common Migration Scenarios
 
 #### Local SQLite → Supabase (Going to Production)
