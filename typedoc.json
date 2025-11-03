@@ -31,7 +31,7 @@
     "Errors",
     "*"
   ],
-  "gitRevision": "main",
+  "gitRevision": "master",
   "sourceLinkTemplate": "https://github.com/wearetheframers/sql-storage-adapter/blob/{gitRevision}/{path}#L{line}",
   "cleanOutputDir": true,
   "hideGenerator": false,
