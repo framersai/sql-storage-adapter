@@ -622,4 +622,4 @@ await db.run('INSERT INTO posts (user_id, content) VALUES (?, ?)', [user.id, con
 
 ---
 
-For more examples and patterns, see the [GitHub repository](https://github.com/wearetheframers/sql-storage-adapter).
+For more examples and patterns, see the [GitHub repository](https://github.com/framersai/sql-storage-adapter).
