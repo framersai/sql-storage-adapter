@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { importData, importFromJSON, importFromSQL, importFromCSV } from '../src/features/migrations/dataImport';
 import { exportData, exportAsJSON, exportAsSQL } from '../src/features/migrations/dataExport';
 import { createBetterSqliteAdapter } from '../src/adapters/betterSqliteAdapter';
+import { createSqlJsAdapter } from '../src/adapters/sqlJsAdapter';
 import type { StorageAdapter } from '../src/types';
 import type { ExportedData } from '../src/features/migrations/dataExport';
 
@@ -9,11 +10,24 @@ describe('Data Import', () => {
   let sourceAdapter: StorageAdapter;
   let targetAdapter: StorageAdapter;
 
+  const createTestAdapter = async (): Promise<StorageAdapter> => {
+    const sqliteAdapter = createBetterSqliteAdapter(':memory:');
+    try {
+      await sqliteAdapter.open();
+      return sqliteAdapter;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('better-sqlite3 module is not available')) {
+        const fallback = createSqlJsAdapter();
+        await fallback.open();
+        return fallback;
+      }
+      throw error;
+    }
+  };
+
   beforeEach(async () => {
-    sourceAdapter = createBetterSqliteAdapter(':memory:');
-    targetAdapter = createBetterSqliteAdapter(':memory:');
-    await sourceAdapter.open();
-    await targetAdapter.open();
+    sourceAdapter = await createTestAdapter();
+    targetAdapter = await createTestAdapter();
 
     // Create and populate source database
     await sourceAdapter.exec(`
@@ -241,5 +255,10 @@ describe('Data Import', () => {
       ['Charlie']
     );
     expect(charlie?.email).toBeNull();
+  });
+
+  afterEach(async () => {
+    await sourceAdapter.close();
+    await targetAdapter.close();
   });
 });

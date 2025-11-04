@@ -1,14 +1,29 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { exportData, exportAsJSON, exportAsSQL, exportAsCSV } from '../src/features/migrations/dataExport';
 import { createBetterSqliteAdapter } from '../src/adapters/betterSqliteAdapter';
+import { createSqlJsAdapter } from '../src/adapters/sqlJsAdapter';
 import type { StorageAdapter } from '../src/types';
 
 describe('Data Export', () => {
   let adapter: StorageAdapter;
 
+  const createTestAdapter = async (): Promise<StorageAdapter> => {
+    const sqliteAdapter = createBetterSqliteAdapter(':memory:');
+    try {
+      await sqliteAdapter.open();
+      return sqliteAdapter;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('better-sqlite3 module is not available')) {
+        const fallback = createSqlJsAdapter();
+        await fallback.open();
+        return fallback;
+      }
+      throw error;
+    }
+  };
+
   beforeEach(async () => {
-    adapter = createBetterSqliteAdapter(':memory:');
-    await adapter.open();
+    adapter = await createTestAdapter();
 
     // Create test schema
     await adapter.exec(`
@@ -161,5 +176,9 @@ describe('Data Export', () => {
     const exported = await exportData(adapter, { batchSize: 100 });
 
     expect(exported.data.users.length).toBeGreaterThan(100);
+  });
+
+  afterEach(async () => {
+    await adapter.close();
   });
 });
