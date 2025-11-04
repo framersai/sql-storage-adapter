@@ -67,6 +67,22 @@ const todos = await db.all('SELECT * FROM todos WHERE done = 0');
 await db.close();
 ```
 
+## Project Structure
+
+```
+src/
+  adapters/            # Storage backends (better-sqlite3, postgres, sql.js, supabase, ...)
+  core/                # Fundamental contracts, resolver, and database APIs
+  features/
+    backup/            # Cloud backup manager
+    migrations/        # Export/import helpers
+    sync/              # Offline/online sync manager
+  shared/              # Cross-cutting helpers (e.g. parameter normalisation)
+  types/               # Type-only re-export entrypoints
+```
+
+The new layout makes it easier to jump between low-level contracts and higher-level features, and keeps optional tooling out of the critical path for runtime adapters.
+
 ## Core API
 
 ```typescript
@@ -294,6 +310,12 @@ const context = db.context;
 console.log('Adapter:', db.kind);
 console.log('Capabilities:', Array.from(db.capabilities));
 console.log('Max connections:', context.getLimitations().maxConnections);
+```
+
+Type-only imports are now available via the dedicated entrypoint:
+
+```typescript
+import type { StorageAdapterCapabilities } from '@framers/sql-storage-adapter/types';
 ```
 
 ## Event Monitoring
