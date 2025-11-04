@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   migrateLocalToSupabase,
   migrateAdapters,
@@ -8,17 +8,34 @@ import {
   formatMigrationResult,
 } from '../src/features/migrations/migration';
 import { createBetterSqliteAdapter } from '../src/adapters/betterSqliteAdapter';
+import { createSqlJsAdapter } from '../src/adapters/sqlJsAdapter';
 import type { StorageAdapter } from '../src/types';
 
 describe('Migration Utilities', () => {
   let sourceAdapter: StorageAdapter;
   let targetAdapter: StorageAdapter;
 
+  const createTestAdapter = async (): Promise<StorageAdapter> => {
+    const sqliteAdapter = createBetterSqliteAdapter(':memory:');
+    try {
+      await sqliteAdapter.open();
+      return sqliteAdapter;
+    } catch (error) {
+      if (isBetterSqliteUnavailable(error)) {
+        const fallback = createSqlJsAdapter();
+        await fallback.open();
+        return fallback;
+      }
+      throw error;
+    }
+  };
+
+  const isBetterSqliteUnavailable = (error: unknown): boolean =>
+    error instanceof Error && error.message.includes('better-sqlite3 module is not available');
+
   beforeEach(async () => {
-    sourceAdapter = createBetterSqliteAdapter(':memory:');
-    targetAdapter = createBetterSqliteAdapter(':memory:');
-    await sourceAdapter.open();
-    await targetAdapter.open();
+    sourceAdapter = await createTestAdapter();
+    targetAdapter = await createTestAdapter();
 
     // Create test schema in source
     await sourceAdapter.exec(`
@@ -64,6 +81,11 @@ describe('Migration Utilities', () => {
       'Second Post',
       'Goodbye World',
     ]);
+  });
+
+  afterEach(async () => {
+    await sourceAdapter.close();
+    await targetAdapter.close();
   });
 
   it('should migrate all data between adapters', async () => {
