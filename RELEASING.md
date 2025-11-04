@@ -78,9 +78,9 @@ git commit -m "docs: update README [skip release]"
 ## Links After Publishing
 
 - **NPM**: https://www.npmjs.com/package/@framers/sql-storage-adapter
-- **Documentation**: https://wearetheframers.github.io/sql-storage-adapter/
-- **Releases**: https://github.com/wearetheframers/sql-storage-adapter/releases
-- **Repository**: https://github.com/wearetheframers/sql-storage-adapter
+- **Documentation**: https://framersai.github.io/sql-storage-adapter/
+- **Releases**: https://github.com/framersai/sql-storage-adapter/releases
+- **Repository**: https://github.com/framersai/sql-storage-adapter
 
 ## Secrets Required
 
@@ -109,7 +109,7 @@ npm run test
 npm publish --access public
 
 # Create GitHub release manually
-# Go to: https://github.com/wearetheframers/sql-storage-adapter/releases/new
+# Go to: https://github.com/framersai/sql-storage-adapter/releases/new
 ```
 
 ## Workflow Files

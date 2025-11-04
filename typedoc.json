@@ -10,7 +10,8 @@
   "readme": "README.md",
   "name": "SQL Storage Adapter",
   "navigationLinks": {
-    "GitHub": "https://github.com/wearetheframers/sql-storage-adapter",
+    "Frame.dev": "https://frame.dev",
+    "GitHub": "https://github.com/framersai/sql-storage-adapter",
     "NPM": "https://www.npmjs.com/package/@framers/sql-storage-adapter"
   },
   "sort": ["source-order", "required-first"],
@@ -32,7 +33,7 @@
     "*"
   ],
   "gitRevision": "master",
-  "sourceLinkTemplate": "https://github.com/wearetheframers/sql-storage-adapter/blob/{gitRevision}/{path}#L{line}",
+  "sourceLinkTemplate": "https://github.com/framersai/sql-storage-adapter/blob/{gitRevision}/{path}#L{line}",
   "cleanOutputDir": true,
   "hideGenerator": false,
   "searchInComments": true

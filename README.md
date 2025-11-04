@@ -1,13 +1,19 @@
+<p align="center">
+  <a href="https://frame.dev" target="_blank" rel="noopener">
+    <img src="./branding/frame-wordmark.svg" alt="Frame logo" width="320">
+  </a>
+</p>
+
 # SQL Storage Adapter
 
 [![npm version](https://img.shields.io/npm/v/@framers/sql-storage-adapter.svg)](https://www.npmjs.com/package/@framers/sql-storage-adapter)
-[![CI](https://github.com/wearetheframers/sql-storage-adapter/actions/workflows/ci.yml/badge.svg)](https://github.com/wearetheframers/sql-storage-adapter/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/wearetheframers/sql-storage-adapter/branch/master/graph/badge.svg)](https://codecov.io/gh/wearetheframers/sql-storage-adapter)
+[![CI](https://github.com/framersai/sql-storage-adapter/actions/workflows/ci.yml/badge.svg)](https://github.com/framersai/sql-storage-adapter/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/framersai/sql-storage-adapter/branch/master/graph/badge.svg)](https://codecov.io/gh/framersai/sql-storage-adapter)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://www.typescriptlang.org/)
 
 > One SQL interface for Node.js, browsers, and mobile apps. Write your database code once, run it anywhere.
 
-**[Documentation](https://wearetheframers.github.io/sql-storage-adapter/)** | **[GitHub](https://github.com/wearetheframers/sql-storage-adapter)** | **[NPM](https://www.npmjs.com/package/@framers/sql-storage-adapter)**
+**[Documentation](https://framersai.github.io/sql-storage-adapter/)** | **[GitHub](https://github.com/framersai/sql-storage-adapter)** | **[NPM](https://www.npmjs.com/package/@framers/sql-storage-adapter)** | **[Frame.dev](https://frame.dev)**
 
 ## Why?
 
@@ -371,7 +377,7 @@ Yes. Use `mode: 'manual'` and call `sync()` when `isOnWiFi === true`. See [Offli
 
 ## Documentation
 
-- **[API Documentation](https://wearetheframers.github.io/sql-storage-adapter/)** - Complete TypeDoc reference
+- **[API Documentation](https://framersai.github.io/sql-storage-adapter/)** - Complete TypeDoc reference
 - **[Offline Sync Guide](./guides/OFFLINE_SYNC.md)** - Comprehensive sync patterns
 - **[PostgreSQL Guide](./guides/POSTGRES_REMOTE_CONNECTION.md)** - Remote database setup
 - **[Architecture](./ARCHITECTURE.md)** - Design decisions
