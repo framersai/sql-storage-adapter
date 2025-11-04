@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://frame.dev" target="_blank" rel="noopener">
-    <img src="./branding/frame-wordmark.svg" alt="Frame logo" width="320">
+    <img src="./logos/frame-wordmark.svg" alt="Frame logo" width="320">
   </a>
 </p>
 
@@ -389,3 +389,11 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md)
 ## License
 
 MIT © [The Framers](https://frame.dev)
+
+---
+
+<p align="center">
+  <a href="https://frame.dev" target="_blank" rel="noopener">
+    <img src="./logos/frame-wordmark.svg" alt="Frame.dev wordmark" width="200">
+  </a>
+</p>

@@ -20,8 +20,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "branding"
+    "dist"
   ],
   "scripts": {
     "clean": "rimraf dist tsconfig.build.tsbuildinfo",
