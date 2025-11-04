@@ -12,9 +12,8 @@ dist/
 src/**/*.js
 src/**/*.d.ts
 src/**/*.js.map
-!src/types/aws-sdk__client-s3.d.ts
-!src/types/capacitor-community__sqlite.d.ts
-!src/types/sql.js.d.ts
+!src/core/contracts/external/*.d.ts
+!src/shims/**/*.d.ts
 
 # IDE
 .vscode/
