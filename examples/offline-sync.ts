@@ -4,7 +4,75 @@
  * Real-world examples of using SyncManager for various patterns.
  */
 
-import { createSyncManager } from '../src/utils/syncManager';
+import { createSyncManager } from '../src/features/sync/syncManager';
+
+// cspell:ignore AUTOINCREMENT collab prefs
+
+type PlainObject = Record<string, unknown>;
+
+const isPlainObject = (value: unknown): value is PlainObject =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const normaliseSettings = (value: unknown): PlainObject => {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (isPlainObject(parsed)) {
+        return { ...parsed };
+      }
+    } catch (error) {
+      console.warn('[Sync Examples] Failed to parse settings JSON.', error);
+    }
+    return {};
+  }
+
+  if (isPlainObject(value)) {
+    return { ...value };
+  }
+
+  return {};
+};
+
+const getStringField = (source: PlainObject, key: string): string | undefined => {
+  const value = source[key];
+  return typeof value === 'string' ? value : undefined;
+};
+
+interface ProfileMergeRecord {
+  raw: PlainObject;
+  display_name?: string;
+  avatar?: string;
+  bio?: string;
+  settings: PlainObject;
+}
+
+const toProfileMergeRecord = (value: unknown): ProfileMergeRecord => {
+  if (!isPlainObject(value)) {
+    return { raw: {}, settings: {} };
+  }
+
+  return {
+    raw: value,
+    display_name: getStringField(value, 'display_name'),
+    avatar: getStringField(value, 'avatar'),
+    bio: getStringField(value, 'bio'),
+    settings: normaliseSettings(value['settings']),
+  };
+};
+
+const selectBooleanPreference = (
+  primary: PlainObject,
+  fallback: PlainObject,
+  key: string,
+): boolean | undefined => {
+  const primaryValue = primary[key];
+  if (typeof primaryValue === 'boolean') {
+    return primaryValue;
+  }
+
+  const fallbackValue = fallback[key];
+  return typeof fallbackValue === 'boolean' ? fallbackValue : undefined;
+};
 
 // =============================================================================
 // Example 1: Mobile App with WiFi-Only Sync
@@ -262,16 +330,29 @@ async function customMergeExample() {
           conflictStrategy: 'merge',
           mergeFn: (local, remote) => {
             console.log('  🔀 Merging profiles...');
+            const localProfile = toProfileMergeRecord(local);
+            const remoteProfile = toProfileMergeRecord(remote);
+            const mergedSettings = {
+              ...remoteProfile.settings,
+              ...localProfile.settings,
+            } as PlainObject;
+
+            const notificationPreference = selectBooleanPreference(
+              localProfile.settings,
+              remoteProfile.settings,
+              'notifications',
+            );
+
+            if (typeof notificationPreference === 'boolean') {
+              mergedSettings.notifications = notificationPreference;
+            }
+
             return {
-              ...remote,                     // Start with remote
-              display_name: local.display_name,  // Keep local name
-              avatar: local.avatar,          // Keep local avatar
-              bio: remote.bio,               // Use remote bio
-              settings: {                    // Merge settings
-                ...remote.settings,
-                ...local.settings,
-                notifications: local.settings.notifications  // Keep local prefs
-              }
+              ...remoteProfile.raw,          // Start with remote record
+              display_name: localProfile.display_name ?? remoteProfile.display_name ?? null,
+              avatar: localProfile.avatar ?? remoteProfile.avatar ?? null,
+              bio: remoteProfile.bio ?? localProfile.bio ?? null,
+              settings: mergedSettings,
             };
           }
         }

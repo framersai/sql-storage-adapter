@@ -139,7 +139,7 @@ async function customStorageBackup() {
   
   // Use your custom storage provider
   const storage = new CustomStorageProvider();
-  const { CloudBackupManager } = await import('../src/utils/cloudBackup');
+  const { CloudBackupManager } = await import('../src/features/backup/cloudBackup');
   
   const backupManager = new CloudBackupManager(db, storage, {
     interval: 60 * 60 * 1000,
