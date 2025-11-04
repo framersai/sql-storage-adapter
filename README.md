@@ -13,7 +13,7 @@
 
 > One SQL interface for Node.js, browsers, and mobile apps. Write your database code once, run it anywhere.
 
-**[Documentation](https://framersai.github.io/sql-storage-adapter/)** | **[GitHub](https://github.com/framersai/sql-storage-adapter)** | **[NPM](https://www.npmjs.com/package/@framers/sql-storage-adapter)** | **[Frame.dev](https://frame.dev)**
+**[Documentation](https://framersai.github.io/sql-storage-adapter/)** | **[GitHub](https://github.com/framersai/sql-storage-adapter)** | **[NPM](https://www.npmjs.com/package/@framers/sql-storage-adapter)** | **[Changelog](./CHANGELOG.md)** | **[Frame.dev](https://frame.dev)**
 
 ## Why?
 

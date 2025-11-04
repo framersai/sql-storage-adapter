@@ -42,6 +42,16 @@ jobs:
       - name: Build package
         run: npm run build
 
+      - name: Generate changelog
+        run: |
+          if [ -f cliff.toml ]; then
+            curl -sSL https://github.com/orhun/git-cliff/releases/download/v2.4.0/git-cliff-2.4.0-x86_64-unknown-linux-musl.tar.gz -o /tmp/git-cliff.tar.gz
+            tar -xz -f /tmp/git-cliff.tar.gz -C /tmp
+            /tmp/git-cliff-2.4.0/git-cliff --config cliff.toml --output CHANGELOG.md --prepend CHANGELOG.md
+            cat CHANGELOG.md
+          fi
+        shell: bash
+
       - name: Read package version
         id: pkg
         run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
