@@ -1,126 +1,41 @@
 # Release Process
 
-This package uses **automated releases** - no manual publishing needed!
+Releases for `@framers/sql-storage-adapter` are handled automatically by the GitHub Actions workflow in `.github/workflows/release.yml`. Whenever a change is merged into `master` and the package version changes, the pipeline will:
 
-## How It Works
+- install dependencies, run the test suite, and build the package;
+- publish the new version to npm (if it has not already been published);
+- tag the commit as `vX.Y.Z` and create or update the matching GitHub Release using the changelog entry.
 
-### Automatic Release on Master
+## Required secrets
 
-When you commit to `master` branch:
-1. ✅ Tests run automatically
-2. ✅ Package builds
-3. ✅ Git tag created (from package.json version)
-4. ✅ GitHub Release created with notes
-5. ✅ Published to NPM automatically
-6. ✅ Docs deployed to GitHub Pages
+Add the following secret under **Settings > Secrets and variables > Actions**:
 
-**No manual steps required!**
+- `NPM_TOKEN` - npm automation token with `publish` scope for `@framers/sql-storage-adapter`.
 
-## Making a Release
+The workflow uses the built-in `GITHUB_TOKEN` for tagging and creating releases.
 
-### 1. Update Version
+## Cutting a release
 
-```bash
-cd packages/sql-storage-adapter
+1. Update the version (use `--no-git-tag-version` so the workflow owns the tag):
 
-# Bump version (patch: 0.1.0 -> 0.1.1)
-npm version patch
+   ```bash
+   npm version --no-git-tag-version patch  # or minor / major
+   ```
 
-# Or minor (0.1.0 -> 0.2.0)
-npm version minor
+2. Update `CHANGELOG.md` with notes for the new version.
 
-# Or major (0.1.0 -> 1.0.0)
-npm version major
-```
+3. Commit and push the changes to `master` (or merge a PR targeting `master`). The workflow will publish to npm and create the GitHub release.
 
-### 2. Update CHANGELOG.md
+Monitor progress in the **Actions** tab and verify that the npm package and GitHub release have been created once the workflow succeeds.
 
-Add release notes:
+## Manual fallback
 
-```markdown
-## [0.1.1] - 2025-11-03
-
-### Added
-- New feature X
-- New feature Y
-
-### Fixed
-- Bug fix A
-- Bug fix B
-```
-
-### 3. Commit and Push
+If automated publishing ever needs to be bypassed:
 
 ```bash
-git add package.json CHANGELOG.md
-git commit -m "chore: bump version to 0.1.1"
-git push origin master
-```
-
-That's it! The automation handles the rest.
-
-## Skip Auto-Release
-
-To push to master without triggering a release:
-
-```bash
-git commit -m "docs: update README [skip release]"
-```
-
-## What Gets Published
-
-- ✅ `dist/` - Compiled JavaScript + TypeScript declarations
-- ✅ `README.md` - Package documentation
-- ✅ `LICENSE` - MIT license
-- ✅ `CHANGELOG.md` - Version history
-- ✅ `package.json` - Package metadata
-
-## Links After Publishing
-
-- **NPM**: https://www.npmjs.com/package/@framers/sql-storage-adapter
-- **Documentation**: https://framersai.github.io/sql-storage-adapter/
-- **Releases**: https://github.com/framersai/sql-storage-adapter/releases
-- **Repository**: https://github.com/framersai/sql-storage-adapter
-
-## Secrets Required
-
-The GitHub Actions workflow needs these secrets:
-
-1. **`NPM_TOKEN`** - NPM publish token
-   - Go to: https://www.npmjs.com/settings/YOUR_USERNAME/tokens
-   - Create "Automation" token
-   - Add to: GitHub repo → Settings → Secrets → Actions
-
-2. **`GITHUB_TOKEN`** - Auto-provided by GitHub (no setup needed)
-
-## Manual Release (Emergency)
-
-If automation fails, publish manually:
-
-```bash
-# Login to NPM
-npm login
-
-# Build and test
 npm run build
 npm run test
-
-# Publish
 npm publish --access public
-
-# Create GitHub release manually
-# Go to: https://github.com/framersai/sql-storage-adapter/releases/new
 ```
 
-## Workflow Files
-
-- `.github/workflows/ci.yml` - Tests, build, docs
-- `.github/workflows/release.yml` - Auto release + NPM publish
-
-## Versioning
-
-We follow [Semantic Versioning](https://semver.org/):
-
-- **MAJOR** (1.0.0) - Breaking changes
-- **MINOR** (0.2.0) - New features (backward compatible)
-- **PATCH** (0.1.1) - Bug fixes
+Then create the Git tag and corresponding GitHub release manually.

@@ -1,41 +1,40 @@
-name: Auto Release & Publish
+name: Release sql-storage-adapter
 
 on:
   push:
-    branches: [master]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.github/**'
+    branches:
+      - master
+    paths:
+      - '.github/workflows/release.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'CHANGELOG.md'
+      - 'README.md'
+      - 'src/**'
+      - 'branding/**'
 
 jobs:
-  release:
-    name: Create Release & Publish to NPM
+  publish:
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip release]')"
+    permissions:
+      contents: write
+      packages: write
 
     steps:
-      - name: Checkout code
+      - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential python3
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
-
-      - name: Install optional dependencies
-        run: |
-          npm install better-sqlite3 --force || true
-          npm install @aws-sdk/client-s3 --force || true
+        run: npm ci
 
       - name: Run tests
         run: npm run test
@@ -43,70 +42,63 @@ jobs:
       - name: Build package
         run: npm run build
 
-      - name: Get package version
-        id: package_version
-        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      - name: Read package version
+        id: pkg
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
 
-      - name: Check if tag exists
-        id: check_tag
-        run: |
-          if git rev-parse "v${{ steps.package_version.outputs.VERSION }}" >/dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create Git Tag
-        if: steps.check_tag.outputs.exists == 'false'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ steps.package_version.outputs.VERSION }}" -m "Release v${{ steps.package_version.outputs.VERSION }}"
-          git push origin "v${{ steps.package_version.outputs.VERSION }}"
-
-      - name: Create GitHub Release
-        if: steps.check_tag.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ steps.package_version.outputs.VERSION }}
-          name: v${{ steps.package_version.outputs.VERSION }}
-          body: |
-            ## í³¦ SQL Storage Adapter v${{ steps.package_version.outputs.VERSION }}
-
-            **Install:**
-            ```bash
-            npm install @framers/sql-storage-adapter@${{ steps.package_version.outputs.VERSION }}
-            ```
-
-            **Documentation:** https://wearetheframers.github.io/sql-storage-adapter/
-            **NPM Package:** https://www.npmjs.com/package/@framers/sql-storage-adapter
-
-            ### Changes
-            See [CHANGELOG.md](https://github.com/wearetheframers/sql-storage-adapter/blob/master/CHANGELOG.md) for details.
-          files: |
-            dist/**/*
-            LICENSE
-            README.md
-            CHANGELOG.md
-          draft: false
-          prerelease: false
+      - name: Check if version is already published
+        id: npm_check
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const { execSync } = require('child_process');
+          const version = process.env.VERSION;
+          let published = false;
+          try {
+            const current = execSync('npm view @framers/sql-storage-adapter version', { stdio: ['ignore', 'pipe', 'ignore'] })
+              .toString()
+              .trim();
+            published = current === version;
+          } catch (error) {
+            if (error.status !== 1) {
+              throw error;
+            }
+          }
+          console.log(`published=${published}`);
+          NODE
 
-      - name: Publish to NPM
-        if: steps.check_tag.outputs.exists == 'false'
+      - name: Publish to npm
+        if: steps.npm_check.outputs.published == 'false'
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Comment on commit
-        if: steps.check_tag.outputs.exists == 'false'
-        uses: actions/github-script@v7
+      - name: Generate release notes
+        if: steps.npm_check.outputs.published == 'false'
+        id: notes
+        env:
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const version = process.env.VERSION;
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const escaped = version.replace(/[.*+?^${}()|[\]\]/g, '\$&');
+          const regex = new RegExp(`## \[${escaped}\][\s\S]*?(?=\n## \[|$)`, 'm');
+          const match = changelog.match(regex);
+          const notes = match ? match[0].trim() : `## [${version}]\n\nRelease notes not found.`;
+          console.log("notes<<EOF");
+          console.log(notes);
+          console.log("EOF");
+          NODE
+
+      - name: Create GitHub release
+        if: steps.npm_check.outputs.published == 'false'
+        uses: ncipollo/release-action@v1
         with:
-          script: |
-            github.rest.repos.createCommitComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: context.sha,
-              body: 'íº€ Published v${{ steps.package_version.outputs.VERSION }} to NPM!\n\ní³¦ https://www.npmjs.com/package/@framers/sql-storage-adapter\ní³š https://wearetheframers.github.io/sql-storage-adapter/'
-            })
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: v${{ steps.pkg.outputs.version }}
+          name: sql-storage-adapter v${{ steps.pkg.outputs.version }}
+          body: ${{ steps.notes.outputs.notes }}
+          allowUpdates: true
