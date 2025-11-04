@@ -7,7 +7,7 @@ import {
   SUPABASE_LIMITATIONS,
   ADAPTER_LIMITATIONS_MAP,
   getLimitationsForAdapter
-} from '../src/types/limitations.js';
+} from '../src/core/contracts/limitations.js';
 
 describe('Adapter Limitations', () => {
   describe('BETTER_SQLITE3_LIMITATIONS', () => {

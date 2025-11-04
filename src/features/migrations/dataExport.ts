@@ -3,7 +3,7 @@
  * Supports exporting data to portable formats (JSON, SQL, CSV).
  */
 
-import type { StorageAdapter } from '../types';
+import type { StorageAdapter } from '../../core/contracts';
 
 /**
  * Export format types.

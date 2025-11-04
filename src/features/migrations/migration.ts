@@ -1,9 +1,9 @@
 /**
  * High-level migration utilities for moving data between adapters.
- * Simplifies common migration scenarios like local → Supabase, Supabase → local, etc.
+ * Simplifies common migration scenarios like local -> Supabase, Supabase -> local, etc.
  */
 
-import type { StorageAdapter } from '../types';
+import type { StorageAdapter } from '../../core/contracts';
 import { exportData, exportAsJSON } from './dataExport';
 import { migrateAdapter, type ImportResult, type DataImportOptions } from './dataImport';
 
@@ -267,24 +267,24 @@ export function formatMigrationResult(result: MigrationResult): string {
   lines.push('='.repeat(60));
   lines.push(`Source: ${result.sourceAdapter}`);
   lines.push(`Target: ${result.targetAdapter}`);
-  lines.push(`Status: ${result.success ? '✅ SUCCESS' : '❌ FAILED'}`);
+  lines.push(`Status: ${result.success ? '[OK] SUCCESS' : '[X] FAILED'}`);
   lines.push(`Duration: ${result.duration}ms`);
   lines.push(`Tables: ${result.tablesImported}`);
   lines.push(`Rows: ${result.rowsImported}`);
 
   if (result.errors && result.errors.length > 0) {
     lines.push('\nErrors:');
-    result.errors.forEach(err => lines.push(`  ❌ ${err}`));
+    result.errors.forEach(err => lines.push(`  [X] ${err}`));
   }
 
   if (result.verification) {
     lines.push('\nVerification:');
-    lines.push(`Status: ${result.verification.passed ? '✅ PASSED' : '❌ FAILED'}`);
+    lines.push(`Status: ${result.verification.passed ? '[OK] PASSED' : '[X] FAILED'}`);
 
     if (Object.keys(result.verification.tableCounts).length > 0) {
       lines.push('\nTable Counts:');
       for (const [table, counts] of Object.entries(result.verification.tableCounts)) {
-        const status = counts.match ? '✅' : '❌';
+        const status = counts.match ? '[OK]' : '[X]';
         lines.push(
           `  ${status} ${table}: source=${counts.source}, target=${counts.target}`
         );
@@ -293,7 +293,7 @@ export function formatMigrationResult(result: MigrationResult): string {
 
     if (result.verification.errors && result.verification.errors.length > 0) {
       lines.push('\nVerification Errors:');
-      result.verification.errors.forEach(err => lines.push(`  ❌ ${err}`));
+      result.verification.errors.forEach(err => lines.push(`  [X] ${err}`));
     }
   }
 

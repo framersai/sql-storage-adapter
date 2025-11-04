@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { exportData, exportAsJSON, exportAsSQL, exportAsCSV } from '../src/utils/dataExport';
+import { exportData, exportAsJSON, exportAsSQL, exportAsCSV } from '../src/features/migrations/dataExport';
 import { createBetterSqliteAdapter } from '../src/adapters/betterSqliteAdapter';
 import type { StorageAdapter } from '../src/types';
 

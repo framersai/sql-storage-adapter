@@ -6,7 +6,7 @@
  * developers to manually check capability flags.
  */
 
-import type { StorageAdapter, StorageCapability } from '../types';
+import type { StorageAdapter, StorageCapability } from './index';
 import type { PerformanceMetrics } from './extensions';
 
 /**
@@ -278,3 +278,4 @@ export interface AdapterContext {
    */
   getStatus(): AdapterStatus;
 }
+

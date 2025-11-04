@@ -6,7 +6,7 @@ import {
   restoreFromBackup,
   cloneAdapter,
   formatMigrationResult,
-} from '../src/utils/migration';
+} from '../src/features/migrations/migration';
 import { createBetterSqliteAdapter } from '../src/adapters/betterSqliteAdapter';
 import type { StorageAdapter } from '../src/types';
 
@@ -221,7 +221,7 @@ describe('Migration Utilities', () => {
     expect(formatted).toContain('Source:');
     expect(formatted).toContain('Target:');
     expect(formatted).toContain('Status:');
-    expect(formatted).toContain('✅');
+    expect(formatted).toContain('[OK]');
     expect(formatted).toContain('Tables: 2');
     expect(formatted).toContain('Rows: 4');
     expect(formatted).toContain('Verification:');
@@ -291,3 +291,4 @@ describe('Migration Utilities', () => {
     expect(result.duration).toBeLessThan(10000); // Should be fast for small dataset
   });
 });
+

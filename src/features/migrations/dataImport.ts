@@ -3,7 +3,7 @@
  * Supports importing from JSON, SQL dumps, and CSV files.
  */
 
-import type { StorageAdapter } from '../types';
+import type { StorageAdapter } from '../../core/contracts';
 import type { ExportedData, TableSchema } from './dataExport';
 
 /**

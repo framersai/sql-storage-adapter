@@ -1,4 +1,4 @@
-import type { StorageParameters } from '../types';
+import type { StorageParameters } from '../core/contracts';
 
 /**
  * Normalises parameter payloads into a tuple of named/object parameters and positional arrays.

@@ -196,3 +196,4 @@ export function getLimitationsForAdapter(
 ): AdapterLimitations {
   return ADAPTER_LIMITATIONS_MAP[kind];
 }
+

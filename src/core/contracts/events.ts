@@ -5,7 +5,7 @@
  * for logging, monitoring, debugging, and analytics purposes.
  */
 
-import type { StorageParameters } from '../types';
+import type { StorageParameters } from './index';
 import type { AdapterContext } from './context';
 
 /**
@@ -263,3 +263,4 @@ export interface EventEmitterOptions {
   /** Whether to log warnings for too many listeners */
   warnOnMaxListeners?: boolean;
 }
+

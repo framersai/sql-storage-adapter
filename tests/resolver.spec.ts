@@ -1,10 +1,23 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { resolveStorageAdapter, StorageResolutionError } from '../src/index.js';
 
+const ensureStorageResolutionError = (error: unknown): StorageResolutionError => {
+  if (error instanceof StorageResolutionError) {
+    return error;
+  }
+
+  if (error instanceof Error) {
+    throw error;
+  }
+
+  throw new Error(String(error));
+};
+
 describe('Storage Adapter Resolver', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    vi.resetModules();
   });
 
   it('should export resolveStorageAdapter function', () => {
@@ -26,13 +39,13 @@ describe('Storage Adapter Resolver', () => {
       }
     }));
 
-    try {
-      await resolveStorageAdapter({ priority: ['better-sqlite3'] });
-      expect.fail('Should have thrown StorageResolutionError');
-    } catch (error) {
-      expect(error).toBeInstanceOf(StorageResolutionError);
-      expect(error.message).toContain('Unable to resolve a storage adapter');
-    }
+    await expect(
+      resolveStorageAdapter({ priority: ['better-sqlite3'] }).catch((error) => {
+        const resolutionError = ensureStorageResolutionError(error);
+        expect(resolutionError.message).toContain('Unable to resolve a storage adapter');
+        throw resolutionError;
+      }),
+    ).rejects.toBeInstanceOf(StorageResolutionError);
   });
 
   it('should respect priority order when specified', async () => {
@@ -47,8 +60,7 @@ describe('Storage Adapter Resolver', () => {
     try {
       await resolveStorageAdapter(options);
     } catch (error) {
-      // Expected in test environment without actual adapters
-      expect(error).toBeInstanceOf(StorageResolutionError);
+      expect(ensureStorageResolutionError(error)).toBeInstanceOf(StorageResolutionError);
     }
   });
 
@@ -58,20 +70,25 @@ describe('Storage Adapter Resolver', () => {
     try {
       await resolveStorageAdapter();
     } catch (error) {
-      // Expected in test environment
-      expect(error).toBeInstanceOf(StorageResolutionError);
+      expect(ensureStorageResolutionError(error)).toBeInstanceOf(StorageResolutionError);
     }
   });
 
   it('should prioritize PostgreSQL when DATABASE_URL is set', async () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://localhost/test');
+    const postgresModule = await import('../src/adapters/postgresAdapter.js');
+    const postgresSpy = vi
+      .spyOn(postgresModule, 'createPostgresAdapter')
+      .mockImplementation(() => {
+        throw new Error('postgres adapter unavailable in tests');
+      });
 
     try {
       await resolveStorageAdapter();
     } catch (error) {
-      // Expected in test environment
-      expect(error).toBeInstanceOf(StorageResolutionError);
-      expect(error.causes).toBeDefined();
+      const resolvedError = ensureStorageResolutionError(error);
+      expect(resolvedError.causes).toBeDefined();
     }
+    postgresSpy.mockRestore();
   });
 });

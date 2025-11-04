@@ -7,10 +7,10 @@
  * - openDatabase() - Simple file-based database
  */
 
-import type { StorageAdapter } from './types';
+import type { StorageAdapter } from './contracts';
 import { resolveStorageAdapter, type StorageResolutionOptions, type AdapterKind } from './resolver';
-import type { PostgresAdapterOptions } from './adapters/postgresAdapter';
-import type { CapacitorAdapterOptions } from './adapters/capacitorSqliteAdapter';
+import type { PostgresAdapterOptions } from '../adapters/postgresAdapter';
+import type { CapacitorAdapterOptions } from '../adapters/capacitorSqliteAdapter';
 
 /**
  * Database connection options.
@@ -84,8 +84,28 @@ export interface DatabaseOptions {
  * });
  * ```
  */
+/**
+ * Create (or auto-resolve) the most appropriate database adapter for the current
+ * runtime environment. Priority selection logic:
+ *
+ * 1. Explicit `options.priority` (caller-specified) wins entirely.
+ * 2. Explicit `options.type` is mapped to a single adapter priority.
+ * 3. Otherwise we auto-detect environment:
+ *    - Browser / Deno: ['sqljs']
+ *    - Node.js: ['better-sqlite3', 'sqljs'] (native first, wasm fallback)
+ *
+ * The function never throws solely due to a native adapter absence; it falls
+ * back to next candidates. Only when no candidate can open will it bubble an error.
+ */
 export async function createDatabase(options: DatabaseOptions = {}): Promise<StorageAdapter> {
   const resolverOptions: StorageResolutionOptions = {};
+
+  const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
+  const isNode = typeof process !== 'undefined' && !!process.versions?.node;
+  // Use globalThis to avoid TS error when DOM lib not present
+  // (declare loosely to prevent dependency on @types/deno)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isDeno = typeof (globalThis as any).Deno !== 'undefined';
 
   // Handle URL (PostgreSQL)
   if (options.url) {
@@ -107,34 +127,36 @@ export async function createDatabase(options: DatabaseOptions = {}): Promise<Sto
     resolverOptions.capacitor = options.mobile;
   }
 
-  // Handle explicit type
+  // Handle explicit type (maps to a canonical adapter kind)
   if (options.type) {
-    const typeMap = {
-      'postgres': 'postgres',
-      'sqlite': 'better-sqlite3',
-      'browser': 'sqljs',
-      'mobile': 'capacitor',
-      'memory': 'better-sqlite3'  // Memory mode uses better-sqlite3 with :memory:
-    } as const;
+    const typeMap: Record<NonNullable<DatabaseOptions['type']>, AdapterKind> = {
+      postgres: 'postgres',
+      sqlite: 'better-sqlite3',
+      browser: 'sqljs',
+      mobile: 'capacitor',
+      memory: 'better-sqlite3'
+    };
     resolverOptions.priority = [typeMap[options.type]];
-    
-    // Set in-memory mode for SQLite
     if (options.type === 'memory') {
       resolverOptions.filePath = ':memory:';
     }
-
-    if (typeof window !== 'undefined') {
-      // Use `sql.js` or another browser-compatible adapter
-      resolverOptions.priority = ['sqljs'];
-    } else {
-      // Use `better-sqlite3` for Node.js environments
-      resolverOptions.priority = ['better-sqlite3'];
-    }
   }
   
-  // Handle custom priority
+  // Handle custom priority (highest precedence - override previous)
   if (options.priority) {
     resolverOptions.priority = options.priority;
+  }
+
+  // Auto-detect environment ONLY if no priority already set
+  if (!resolverOptions.priority || resolverOptions.priority.length === 0) {
+    if (isBrowser || isDeno) {
+      resolverOptions.priority = ['sqljs'];
+    } else if (isNode) {
+      resolverOptions.priority = ['better-sqlite3', 'sqljs'];
+    } else {
+      // Extremely unusual runtime - be explicit and fail loudly so caller can decide
+      throw new Error('[StorageAdapter] Unsupported runtime environment for automatic adapter selection.');
+    }
   }
 
   const adapter = await resolveStorageAdapter(resolverOptions);

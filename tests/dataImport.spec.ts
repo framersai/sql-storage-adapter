@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { importData, importFromJSON, importFromSQL, importFromCSV } from '../src/utils/dataImport';
-import { exportData, exportAsJSON, exportAsSQL } from '../src/utils/dataExport';
+import { importData, importFromJSON, importFromSQL, importFromCSV } from '../src/features/migrations/dataImport';
+import { exportData, exportAsJSON, exportAsSQL } from '../src/features/migrations/dataExport';
 import { createBetterSqliteAdapter } from '../src/adapters/betterSqliteAdapter';
 import type { StorageAdapter } from '../src/types';
-import type { ExportedData } from '../src/utils/dataExport';
+import type { ExportedData } from '../src/features/migrations/dataExport';
 
 describe('Data Import', () => {
   let sourceAdapter: StorageAdapter;

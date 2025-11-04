@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { StorageResolutionError } from '../src/types.js';
-import * as Types from '../src/types.js';
+import { StorageResolutionError } from '../src/core/contracts/index.ts';
+import * as Types from '../src/types/index.ts';
 
 describe('Types and Exports', () => {
   describe('StorageResolutionError', () => {

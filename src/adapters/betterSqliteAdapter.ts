@@ -1,22 +1,24 @@
 import path from 'path';
-// Conditionally import `url` module only in Node.js environments
-let fileURLToPath: (url: string) => string;
-let pathToFileURL: (path: string) => URL;
 
-if (typeof window === 'undefined') {
-  const url = await import('url');
-  fileURLToPath = url.fileURLToPath;
-  pathToFileURL = url.pathToFileURL;
-} else {
-  throw new Error('better-sqlite3 is not supported in browser environments.');
-}
+/**
+ * Internal environment flags - evaluated at module load but side-effect free.
+ * We deliberately avoid throwing here so that bundlers (Vite, Webpack, etc.)
+ * can safely include this module in a dependency graph for tree-shaking
+ * without immediately exploding in browser builds. Any actual attempt to
+ * OPEN the adapter in a browser will produce a clear runtime error.
+ */
+const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
 
-import type { StorageAdapter, StorageOpenOptions, StorageParameters, StorageRunResult, StorageCapability, BatchOperation, BatchResult } from '../types';
-import { normaliseParameters } from '../utils/parameterUtils';
+// We do NOT import 'url' or perform top-level dynamic imports; this keeps the
+// file side-effect free and friendly to ESM + pre-bundling analyzers.
+// Path resolution is simplified to process.cwd() relative resolution.
+
+import type { StorageAdapter, StorageOpenOptions, StorageParameters, StorageRunResult, StorageCapability, BatchOperation, BatchResult } from '../core/contracts';
+import { normaliseParameters } from '../shared/parameterUtils';
 
 type BetterSqliteModule = typeof import('better-sqlite3');
-type BetterSqliteDatabase = any;
-type BetterSqliteStatement = any;
+type BetterSqliteDatabase = import('better-sqlite3').Database;
+type BetterSqliteStatement = import('better-sqlite3').Statement<unknown[], unknown>;
 
 /**
  * Lazy loader for better-sqlite3 to keep the dependency optional.
@@ -24,20 +26,40 @@ type BetterSqliteStatement = any;
  * This allows the package to work even when better-sqlite3 isn't installed,
  * falling back to other adapters gracefully.
  */
+/**
+ * Lazy loader for the optional native `better-sqlite3` dependency.
+ *
+ * Strategy:
+ * 1. Attempt ESM dynamic import (works when the package is installed and
+ *    supports ESM resolution).
+ * 2. Fallback to CommonJS require via createRequire for environments where
+ *    only the CJS entry is available.
+ * 3. On failure, return null so the resolver can gracefully fall back to a
+ *    different adapter (e.g., sql.js) instead of crashing.
+ */
 const loadBetterSqlite = async (): Promise<BetterSqliteModule | null> => {
   try {
     // Attempt ESM import first (pnpm hoists as ESM-compatible).
     return (await import('better-sqlite3')) as unknown as BetterSqliteModule;
   } catch {
     try {
-      // Fallback to require from current file location.
-      const require = (await import('module')).createRequire(pathToFileURL(__filename));
+      // Fallback to CJS require. Use createRequire relative to process.cwd()
+      // to avoid depending on url.fileURLToPath in browser bundles.
+      const { createRequire } = await import('module');
+      const require = createRequire(path.join(process.cwd(), 'noop.js'));
       return require('better-sqlite3') as unknown as BetterSqliteModule;
     } catch (error) {
       console.warn('[StorageAdapter] better-sqlite3 module not available.', error);
       return null;
     }
   }
+};
+
+const normaliseRowId = (rowId: number | bigint | null | undefined): string | number | null => {
+  if (rowId === null || rowId === undefined) {
+    return null;
+  }
+  return typeof rowId === 'bigint' ? rowId.toString() : rowId;
 };
 
 /**
@@ -64,6 +86,18 @@ const loadBetterSqlite = async (): Promise<BetterSqliteModule | null> => {
  * - Automatically enables WAL mode for better concurrency
  * - Handles database corruption with automatic recovery
  */
+/**
+ * Native SQLite adapter backed by the `better-sqlite3` module.
+ *
+ * Features:
+ * - Synchronous & high-performance local storage
+ * - WAL support, prepared statements, batched writes
+ * - Graceful degradation when the native module is absent
+ *
+ * Browser Safety:
+ * This class can be imported in browser bundles without immediate failure.
+ * A runtime error is only thrown if `open()` is invoked in a browser context.
+ */
 export class BetterSqliteAdapter implements StorageAdapter {
   public readonly kind = 'better-sqlite3';
   public readonly capabilities: ReadonlySet<StorageCapability> = new Set<StorageCapability>([
@@ -88,9 +122,18 @@ export class BetterSqliteAdapter implements StorageAdapter {
    */
   constructor(private readonly defaultFilePath: string) {}
 
+  /**
+   * Open (or no-op if already open) the underlying native database.
+   *
+   * Throws a descriptive error if called in a browser environment.
+   */
   public async open(options?: StorageOpenOptions): Promise<void> {
     if (this.db) {
       return;
+    }
+
+    if (isBrowser) {
+      throw new Error('[StorageAdapter] better-sqlite3 adapter cannot be opened in a browser environment.');
     }
 
     this.module = await loadBetterSqlite();
@@ -99,22 +142,18 @@ export class BetterSqliteAdapter implements StorageAdapter {
     }
 
     // Handle ESM/CJS interop for better-sqlite3 constructor
-    let DatabaseCtor: any = this.module;
-    if ((this.module as unknown as { default?: unknown }).default) {
-      DatabaseCtor = (this.module as any).default;
-    }
+    const moduleReference = this.module as BetterSqliteModule & { default?: BetterSqliteModule };
+    const DatabaseCtor = moduleReference.default ?? moduleReference;
     const resolvedPath = options?.filePath ?? this.defaultFilePath;
-    this.db = new (DatabaseCtor as unknown as new (filename: string, options?: any) => any)(
-      resolvedPath,
-      options?.readOnly ? { readonly: true } : undefined
-    );
+    const databaseOptions = options?.readOnly ? { readonly: true } : undefined;
+    this.db = new DatabaseCtor(resolvedPath, databaseOptions);
   }
 
   public async run(statement: string, parameters?: StorageParameters): Promise<StorageRunResult> {
     const stmt = this.prepareInternal(statement);
     const { named, positional } = normaliseParameters(parameters);
     const result = named ? stmt.run(named) : stmt.run(positional ?? []);
-    return { changes: result.changes, lastInsertRowid: result.lastInsertRowid };
+    return { changes: result.changes, lastInsertRowid: normaliseRowId(result.lastInsertRowid) };
   }
 
   public async get<T = unknown>(statement: string, parameters?: StorageParameters): Promise<T | null> {
@@ -178,7 +217,7 @@ export class BetterSqliteAdapter implements StorageAdapter {
           const result = named ? stmt.run(named) : stmt.run(positional ?? []);
           results.push({
             changes: result.changes,
-            lastInsertRowid: result.lastInsertRowid
+            lastInsertRowid: normaliseRowId(result.lastInsertRowid)
           });
           successful++;
         } catch (error) {
@@ -229,14 +268,21 @@ export class BetterSqliteAdapter implements StorageAdapter {
 /**
  * Factory helper.
  */
+/**
+ * Factory helper for creating a BetterSqliteAdapter.
+ *
+ * Path Resolution:
+ * - Absolute paths are used as-is.
+ * - Relative paths are resolved against the current working directory instead
+ *   of the adapter file location (simpler & bundler neutral).
+ * - Special values like ':memory:' and 'file:' URIs are passed through.
+ */
 export const createBetterSqliteAdapter = (filePath: string): StorageAdapter => {
-  // Don't resolve special SQLite paths
   if (filePath === ':memory:' || filePath.startsWith('file:')) {
     return new BetterSqliteAdapter(filePath);
   }
-  
   const resolved = path.isAbsolute(filePath)
     ? filePath
-    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', filePath);
+    : path.resolve(process.cwd(), filePath);
   return new BetterSqliteAdapter(resolved);
 };

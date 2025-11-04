@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normaliseParameters } from '../src/utils/parameterUtils.js';
+import { normaliseParameters } from '../src/shared/parameterUtils.js';
 
 describe('Parameter Utilities', () => {
   describe('normaliseParameters', () => {

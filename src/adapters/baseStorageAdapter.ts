@@ -37,7 +37,7 @@ import type {
   BatchOperation,
   BatchResult,
   PreparedStatement
-} from '../types';
+} from '../core/contracts';
 
 /**
  * Base state for all adapters.

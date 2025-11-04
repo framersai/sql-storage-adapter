@@ -34,10 +34,10 @@
  * ```
  */
 
-import type { StorageAdapter } from '../types';
-import { createDatabase, openDatabase, connectDatabase } from '../database';
-import { exportData } from './dataExport';
-import { importData } from './dataImport';
+import type { StorageAdapter } from '../../core/contracts';
+import { createDatabase, openDatabase, connectDatabase } from '../../core/database';
+import { exportData } from '../migrations/dataExport';
+import { importData } from '../migrations/dataImport';
 
 /**
  * Sync mode determines when synchronization occurs.
@@ -64,8 +64,8 @@ export type ConflictStrategy =
  */
 export type SyncDirection = 
   | 'bidirectional'  // Sync both ways (default)
-  | 'push-only'      // Only upload local → remote
-  | 'pull-only';     // Only download remote → local
+  | 'push-only'      // Only upload local -> remote
+  | 'pull-only';     // Only download remote -> local
 
 /**
  * Storage limit action for mobile devices.
@@ -79,6 +79,12 @@ export type StorageLimitAction =
  * Table sync priority.
  */
 export type SyncPriority = 'critical' | 'high' | 'medium' | 'low';
+
+type SyncRecord = Record<string, unknown> & {
+  id?: string | number;
+  created_at?: string;
+  updated_at?: string;
+};
 
 /**
  * Per-table sync configuration.
@@ -95,7 +101,7 @@ export interface TableSyncConfig {
   /** Max records to keep locally (mobile optimization) */
   maxRecords?: number;
   /** Custom merge function for 'merge' conflict strategy */
-  mergeFn?: (local: any, remote: any) => any;
+  mergeFn?: (local: SyncRecord, remote: SyncRecord) => SyncRecord;
 }
 
 /**
@@ -210,11 +216,11 @@ export interface SyncConflict {
   /** Table name */
   table: string;
   /** Record identifier */
-  id: any;
+  id: string | number | undefined;
   /** Local version */
-  local: any;
+  local: SyncRecord;
   /** Remote version */
-  remote: any;
+  remote: SyncRecord;
   /** Local last modified timestamp */
   localTimestamp?: string;
   /** Remote last modified timestamp */
@@ -477,11 +483,9 @@ export class SyncManager {
       includeSchema: false
     });
 
-    const conflicts = await this.resolveConflicts(
-      table,
-      localData.data[table] ?? [],
-      remoteData.data[table]
-    );
+    const localRecords = this.sanitiseRecords(localData.data[table]);
+    const remoteRecords = this.sanitiseRecords(remoteData.data[table]);
+    const conflicts = await this.resolveConflicts(table, localRecords, remoteRecords);
 
     // Import to local
     await importData(this.primaryDb, remoteData, {
@@ -491,7 +495,7 @@ export class SyncManager {
     });
 
     return {
-      records: remoteData.data[table].length,
+      records: remoteRecords.length,
       conflicts
     };
   }
@@ -525,13 +529,22 @@ export class SyncManager {
     };
   }
 
+  private sanitiseRecords(records: unknown[] | undefined): SyncRecord[] {
+    if (!records) {
+      return [];
+    }
+    return records
+      .filter((record): record is Record<string, unknown> => typeof record === 'object' && record !== null)
+      .map((record) => record as SyncRecord);
+  }
+
   /**
    * Resolve conflicts between local and remote data.
    */
   private async resolveConflicts(
     table: string,
-    local: any[],
-    remote: any[]
+    local: SyncRecord[],
+    remote: SyncRecord[]
   ): Promise<number> {
     const tableConfig = this.config.tables[table];
     const strategy = tableConfig?.conflictStrategy ?? this.config.conflictStrategy;
@@ -539,23 +552,45 @@ export class SyncManager {
     let conflictCount = 0;
 
     // Build map of local records by ID
-    const localMap = new Map(local.map(r => [r.id, r]));
+    const localMap = new Map<string | number, SyncRecord>();
+    for (const record of local) {
+      if (record.id !== undefined && record.id !== null) {
+        const identifier = record.id as string | number;
+        localMap.set(identifier, record);
+      }
+    }
 
     for (const remoteRecord of remote) {
-      const localRecord = localMap.get(remoteRecord.id);
-      
+      if (remoteRecord.id === undefined || remoteRecord.id === null) {
+        continue;
+      }
+      const identifier = remoteRecord.id as string | number;
+      const localRecord = localMap.get(identifier);
+
       if (!localRecord) continue; // No conflict
 
       // Check if both were modified
-      const localTime = new Date(localRecord.updated_at || localRecord.created_at);
-      const remoteTime = new Date(remoteRecord.updated_at || remoteRecord.created_at);
+      const localTimestampValue =
+        typeof localRecord.updated_at === 'string'
+          ? localRecord.updated_at
+          : typeof localRecord.created_at === 'string'
+            ? localRecord.created_at
+            : new Date().toISOString();
+      const remoteTimestampValue =
+        typeof remoteRecord.updated_at === 'string'
+          ? remoteRecord.updated_at
+          : typeof remoteRecord.created_at === 'string'
+            ? remoteRecord.created_at
+            : new Date().toISOString();
+      const localTime = new Date(localTimestampValue);
+      const remoteTime = new Date(remoteTimestampValue);
 
       if (localRecord.updated_at || remoteRecord.updated_at) {
         conflictCount++;
 
         const conflict: SyncConflict = {
           table,
-          id: remoteRecord.id,
+          id: identifier,
           local: localRecord,
           remote: remoteRecord,
           localTimestamp: localTime.toISOString(),

@@ -1,8 +1,13 @@
-import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types';
-import { normaliseParameters } from '../utils/parameterUtils';
+import type {
+  StorageAdapter,
+  StorageCapability,
+  StorageOpenOptions,
+  StorageParameters,
+  StorageRunResult
+} from '../core/contracts';
+import { normaliseParameters } from '../shared/parameterUtils';
 
-type CapacitorSQLitePlugin = any;
-type SQLiteDBConnection = any;
+import type { CapacitorSQLitePlugin, SQLiteDBConnection } from '@capacitor-community/sqlite';
 
 export interface CapacitorAdapterOptions {
   /**
@@ -15,9 +20,37 @@ export interface CapacitorAdapterOptions {
   enableWal?: boolean;
 }
 
+const isCapacitorPlugin = (value: unknown): value is CapacitorSQLitePlugin => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as { createConnection?: unknown };
+  return typeof candidate.createConnection === 'function';
+};
+
 const loadCapacitorSqlite = async (): Promise<CapacitorSQLitePlugin | null> => {
   try {
-    return await import('@capacitor-community/sqlite');
+    const mod: unknown = await import('@capacitor-community/sqlite');
+
+    if (isCapacitorPlugin(mod)) {
+      return mod;
+    }
+
+    if (mod && typeof mod === 'object') {
+      const { default: defaultExport, CapacitorSQLite } = mod as {
+        default?: unknown;
+        CapacitorSQLite?: unknown;
+      };
+
+      if (isCapacitorPlugin(defaultExport)) {
+        return defaultExport;
+      }
+      if (isCapacitorPlugin(CapacitorSQLite)) {
+        return CapacitorSQLite;
+      }
+    }
+
+    return null;
   } catch (error) {
     console.warn('[StorageAdapter] @capacitor-community/sqlite module not available.', error);
     return null;
@@ -54,8 +87,12 @@ export class CapacitorSqliteAdapter implements StorageAdapter {
       throw new Error('@capacitor-community/sqlite is unavailable. Install the plugin or choose a different adapter.');
     }
 
-    const dbName = options?.adapterOptions?.database ?? this.options.database ?? this.dbName;
-    this.connection = await this.plugin.createConnection(dbName, false, 'no-encryption', 1, false);
+    const adapterOptions = options?.adapterOptions as { database?: unknown } | undefined;
+    const requestedName = typeof adapterOptions?.database === 'string' ? adapterOptions.database : undefined;
+    const configuredName = this.options.database;
+    const resolvedDbName = requestedName ?? configuredName ?? this.dbName;
+
+    this.connection = await this.plugin.createConnection(resolvedDbName, false, 'no-encryption', 1, false);
     await this.connection.open();
 
     if (this.options.enableWal ?? true) {

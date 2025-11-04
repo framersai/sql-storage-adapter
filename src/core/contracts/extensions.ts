@@ -4,7 +4,7 @@
  * beyond the core StorageAdapter interface.
  */
 
-import type { BatchOperation as CoreBatchOperation } from '../types';
+import type { BatchOperation as CoreBatchOperation } from './index';
 
 /**
  * Performance metrics for monitoring adapter usage.
@@ -83,5 +83,6 @@ export interface StorageAdapterExtensions {
 }
 
 // Re-export core types for convenience
-export type { BatchOperation } from '../types';
-export type { BatchResult } from '../types';
+export type { BatchOperation } from './index';
+export type { BatchResult } from './index';
+

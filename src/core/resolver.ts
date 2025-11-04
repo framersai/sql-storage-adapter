@@ -1,14 +1,14 @@
-﻿import path from 'path';
-import type { StorageAdapter, StorageAdapterFactory, StorageOpenOptions } from './types';
-import { StorageResolutionError } from './types';
-import type { AdapterKind } from './types/context';
-import { createBetterSqliteAdapter } from './adapters/betterSqliteAdapter';
-import { createSqlJsAdapter } from './adapters/sqlJsAdapter';
-import { createCapacitorSqliteAdapter, type CapacitorAdapterOptions } from './adapters/capacitorSqliteAdapter';
-import { createPostgresAdapter } from './adapters/postgresAdapter';
+import path from 'path';
+import type { StorageAdapter, StorageAdapterFactory, StorageOpenOptions } from './contracts';
+import { StorageResolutionError } from './contracts';
+import type { AdapterKind } from './contracts/context';
+import { createBetterSqliteAdapter } from '../adapters/betterSqliteAdapter';
+import { createSqlJsAdapter } from '../adapters/sqlJsAdapter';
+import { createCapacitorSqliteAdapter, type CapacitorAdapterOptions } from '../adapters/capacitorSqliteAdapter';
+import { createPostgresAdapter } from '../adapters/postgresAdapter';
 
 // Re-export AdapterKind for external use
-export type { AdapterKind } from './types/context';
+export type { AdapterKind } from './contracts/context';
 
 export interface StorageResolutionOptions {
   /** Absolute path for sqlite file (used by better-sqlite3/sql.js when persistence is desired). */
@@ -23,11 +23,17 @@ export interface StorageResolutionOptions {
   openOptions?: StorageOpenOptions;
 }
 
+interface CapacitorGlobal {
+  Capacitor?: {
+    isNativePlatform?: () => boolean;
+  };
+}
+
 const isCapacitorRuntime = (): boolean => {
   if (typeof window === 'undefined') {
     return false;
   }
-  const maybeCapacitor = (window as any).Capacitor;
+  const maybeCapacitor = (window as Window & CapacitorGlobal).Capacitor;
   return Boolean(maybeCapacitor?.isNativePlatform?.());
 };
 

@@ -1,31 +1,24 @@
-﻿// Core types and interfaces
+// Public type surface -------------------------------------------------------
 export * from './types';
 
-// Extended types for advanced features
-export * from './types/extensions';
-export * from './types/context';
-export * from './types/events';
-export * from './types/limitations';
+// Core runtime APIs ---------------------------------------------------------
+export * from './core/database';
+export * from './core/resolver';
 
-// Adapter implementations
+// Adapter implementations ----------------------------------------------------
 export * from './adapters/betterSqliteAdapter';
 export * from './adapters/sqlJsAdapter';
 export * from './adapters/capacitorSqliteAdapter';
 export * from './adapters/postgresAdapter';
+export * from './adapters/supabase';
+export * from './adapters/baseStorageAdapter';
 
-// High-level API (recommended)
-export * from './database';
+// Feature modules ------------------------------------------------------------
+export * from './features/backup/cloudBackup';
+export * from './features/migrations/dataExport';
+export * from './features/migrations/dataImport';
+export * from './features/migrations/migration';
+export * from './features/sync/syncManager';
 
-// Low-level resolver (advanced usage)
-export * from './resolver';
-
-// Data export/import/migration utilities
-export * from './utils/dataExport';
-export * from './utils/dataImport';
-export * from './utils/migration';
-
-// Cloud backup and scheduled backup utilities
-export * from './utils/cloudBackup';
-
-// Sync manager for offline/online hybrid databases
-export * from './utils/syncManager';
+// Shared utilities -----------------------------------------------------------
+export * from './shared/parameterUtils';

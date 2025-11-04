@@ -2,10 +2,20 @@ import initSqlJs from 'sql.js';
 import type { SqlJsStatic, SqlJsConfig, Database as SqlJsDatabase } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
-import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types';
-import { normaliseParameters } from '../utils/parameterUtils';
+import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../core/contracts';
+import { normaliseParameters } from '../shared/parameterUtils';
 
 type SqlJsAdapterOptions = SqlJsConfig;
+
+const normaliseRowId = (value: unknown): string | number | null => {
+  if (typeof value === 'number' || typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  return null;
+};
 
 const hasFsAccess = (): boolean => {
   try {
@@ -60,7 +70,12 @@ export class SqlJsAdapter implements StorageAdapter {
         stmt.bind(positional);
       }
       stmt.step();
-      return { changes: this.db!.getRowsModified(), lastInsertRowid: this.db!.exec('SELECT last_insert_rowid() AS id')[0]?.values?.[0]?.[0] ?? null };
+      const rowIdResult = this.db!.exec('SELECT last_insert_rowid() AS id');
+      const rawRowId = rowIdResult[0]?.values?.[0]?.[0];
+      return {
+        changes: this.db!.getRowsModified(),
+        lastInsertRowid: normaliseRowId(rawRowId)
+      };
     } finally {
       stmt.free();
       await this.persistIfNeeded();

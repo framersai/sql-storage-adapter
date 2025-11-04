@@ -1,15 +1,11 @@
-﻿// Add at the very top, before any imports
-
-if (typeof window !== 'undefined') {
-  throw new Error(
-    '[StorageAdapter] PostgreSQL adapter is not available in browser environments. ' +
-    'Use sql.js or another browser-compatible adapter instead.'
-  );
-}
+// NOTE: Browser safety - we avoid throwing at module load so bundlers can include
+// this file without crashing. A runtime error will be thrown inside `open()` if
+// execution actually occurs in a browser.
+const __isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
 
 import { Pool, PoolClient, PoolConfig } from 'pg';
-import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../types';
-import { normaliseParameters } from '../utils/parameterUtils';
+import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../core/contracts';
+import { normaliseParameters } from '../shared/parameterUtils';
 
 /**
  * Configuration options for PostgreSQL adapter.
@@ -191,6 +187,12 @@ const splitStatements = (script: string): string[] =>
  * - Connection pool handles transient failures
  * - Falls back to SQLite if PostgreSQL unavailable
  */
+/**
+ * Production-grade PostgreSQL adapter backed by pg.Pool.
+ *
+ * Safe to import in browser bundles; will only throw if `open()` is invoked
+ * in a browser environment.
+ */
 export class PostgresAdapter implements StorageAdapter {
   public readonly kind = 'postgres';
   public readonly capabilities: ReadonlySet<StorageCapability> = new Set<StorageCapability>([
@@ -219,6 +221,10 @@ export class PostgresAdapter implements StorageAdapter {
   public async open(openOptions?: StorageOpenOptions): Promise<void> {
     if (this.pool) {
       return;
+    }
+
+    if (__isBrowser) {
+      throw new Error('[StorageAdapter] PostgreSQL adapter cannot be opened in a browser environment.');
     }
 
     // Build pool configuration
@@ -271,7 +277,11 @@ export class PostgresAdapter implements StorageAdapter {
     const executor = await this.getExecutor();
     const { text, values } = prepareStatement(statement, parameters);
     const result = await executor.query(text, values);
-    return { changes: result.rowCount ?? 0, lastInsertRowid: (result.rows?.[0] as any)?.id ?? null };
+    const firstRow: unknown = result.rows?.[0];
+    const lastInsertRowid = (firstRow && typeof firstRow === 'object' && 'id' in (firstRow as Record<string, unknown>))
+      ? (firstRow as Record<string, unknown>).id as number | string | null
+      : null;
+    return { changes: result.rowCount ?? 0, lastInsertRowid };
   }
 
   public async get<T>(statement: string, parameters?: StorageParameters): Promise<T | null> {

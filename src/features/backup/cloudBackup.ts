@@ -31,9 +31,9 @@
  * @module cloudBackup
  */
 
-import type { StorageAdapter } from '../types';
-import { exportAsJSON, exportAsSQL } from './dataExport';
-import { importFromJSON, importFromSQL } from './dataImport';
+import type { StorageAdapter } from '../../core/contracts';
+import { exportAsJSON, exportAsSQL } from '../migrations/dataExport';
+import { importFromJSON, importFromSQL } from '../migrations/dataImport';
 
 /** Supported backup export formats */
 export type BackupFormat = 'json' | 'sql';

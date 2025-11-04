@@ -11,14 +11,14 @@ import type {
   StorageParameters,
   StorageRunResult,
   BatchResult
-} from '../types';
+} from '../core/contracts';
 import type {
   StorageAdapterExtensions,
   ExtendedBatchOperation,
   Migration,
   PerformanceMetrics,
   StreamOptions
-} from '../types/extensions';
+} from '../core/contracts/extensions';
 
 export interface SupabaseAdapterOptions extends StorageOpenOptions {
   connectionString?: string;
@@ -52,7 +52,7 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
     cacheMisses: 0
   };
   private profilingEnabled = false;
-  private queryCache = new Map<string, any>();
+  private queryCache = new Map<string, unknown>();
   private cacheEnabled = false;
   private maxCacheSize = 100;
 
@@ -118,7 +118,7 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
     }
   }
 
-  private getCacheKey(query: string, params?: any): string {
+  private getCacheKey(query: string, params?: unknown): string {
     return `${query}::${JSON.stringify(params || {})}`;
   }
 
@@ -149,7 +149,8 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
         if (this.metrics.cacheHits !== undefined) {
           this.metrics.cacheHits++;
         }
-        return this.queryCache.get(cacheKey);
+        const cached = this.queryCache.get(cacheKey) as T | null | undefined;
+        return cached ?? null;
       }
       if (this.metrics.cacheMisses !== undefined) {
         this.metrics.cacheMisses++;
@@ -164,7 +165,7 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
       const value = result.rows[0] || null;
 
       // Update cache
-      if (this.cacheEnabled && value) {
+      if (this.cacheEnabled && value !== null) {
         const cacheKey = this.getCacheKey(statement, parameters);
         this.queryCache.set(cacheKey, value);
 
@@ -193,7 +194,10 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
         if (this.metrics.cacheHits !== undefined) {
           this.metrics.cacheHits++;
         }
-        return this.queryCache.get(cacheKey);
+        const cached = this.queryCache.get(cacheKey) as T[] | undefined;
+        if (cached) {
+          return cached;
+        }
       }
       if (this.metrics.cacheMisses !== undefined) {
         this.metrics.cacheMisses++;
@@ -284,7 +288,7 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
   // Extension methods
   async *stream<T = unknown>(
     query: string,
-    parameters?: any,
+    parameters?: unknown,
     options?: StreamOptions
   ): AsyncIterableIterator<T> {
     if (!this.pool) throw new Error('Storage adapter not opened');
@@ -295,7 +299,7 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
 
     while (hasMore) {
       const paginatedQuery = `${query} LIMIT ${batchSize} OFFSET ${offset}`;
-      const rows = await this.all<T>(paginatedQuery, parameters);
+      const rows = await this.all<T>(paginatedQuery, parameters as StorageParameters | undefined);
 
       if (rows.length < batchSize) {
         hasMore = false;
@@ -349,7 +353,7 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
               break;
             }
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           failed++;
           errors.push({ 
             index,
@@ -455,10 +459,10 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
       return { active: 0, idle: 0, waiting: 0, max: 0 };
     }
     return {
-      active: (this.pool as any).totalCount || 0,
-      idle: (this.pool as any).idleCount || 0,
-      waiting: (this.pool as any).waitingCount || 0,
-      max: (this.pool as any)._config?.max || 0
+      active: this.pool.totalCount,
+      idle: this.pool.idleCount,
+      waiting: this.pool.waitingCount,
+      max: this.pool.options?.max ?? 0
     };
   }
 }

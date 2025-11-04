@@ -266,3 +266,4 @@ export class StorageResolutionError extends Error {
     this.name = 'StorageResolutionError';
   }
 }
+
