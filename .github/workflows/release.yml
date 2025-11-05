@@ -98,8 +98,8 @@ jobs:
           const fs = require('fs');
           const version = process.env.VERSION;
           const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
-          const escaped = version.replace(/[.*+?^${}()|[\]\]/g, '\$&');
-          const regex = new RegExp(`## \[${escaped}\][\s\S]*?(?=\n## \[|$)`, 'm');
+          const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`## \\[${escaped}\\][\\s\\S]*?(?=\\n## \\[|$)`, 'm');
           const match = changelog.match(regex);
           const notes = match ? match[0].trim() : `## [${version}]\n\nRelease notes not found.`;
           console.log("notes<<EOF");
