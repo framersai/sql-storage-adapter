@@ -2,7 +2,11 @@
 
 <p align="center">
   <a href="https://frame.dev" target="_blank" rel="noopener">
-    <img src="./logos/frame-wordmark.svg" alt="Frame.dev" width="280">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="./logos/frame-square-blue-dark-no-tagline.svg">
+      <source media="(prefers-color-scheme: light)" srcset="./logos/frame-square-blue-no-tagline.svg">
+      <img src="./logos/frame-square-blue-no-tagline.svg" alt="Frame.dev" width="200">
+    </picture>
   </a>
 </p>
 

@@ -43,24 +43,18 @@ describe('CloudBackupManager', () => {
 
   const createTestDatabase = async () => {
     try {
-      return await createDatabase({ type: 'memory' });
+      return await createDatabase({ priority: ['sqljs'] });
     } catch (error) {
-      if (error instanceof Error && error.message.includes('better-sqlite3 module is not available')) {
-        const adapter = createSqlJsAdapter();
-        await adapter.open();
-        return adapter;
-      }
-      if (error instanceof Error && error.message.includes('sql.js')) {
-        const adapter = createSqlJsAdapter();
-        await adapter.open();
-        return adapter;
-      }
-      throw error;
+      // In CI we deliberately fall back to sql.js whenever native bindings are unavailable.
+      const adapter = createSqlJsAdapter();
+      await adapter.open();
+      return adapter;
     }
   };
 
   beforeEach(async () => {
     db = await createTestDatabase();
+    await db.exec('DROP TABLE IF EXISTS users; DROP TABLE IF EXISTS posts;');
     await db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)');
     await db.run('INSERT INTO users (name) VALUES (?)', ['Alice']);
     await db.run('INSERT INTO users (name) VALUES (?)', ['Bob']);
