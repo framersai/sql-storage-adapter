@@ -2,8 +2,10 @@
  * Tests for cloud backup functionality.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createDatabase } from '../src/core/database';
+import { createSqlJsAdapter } from '../src/adapters/sqlJsAdapter';
+import { createBetterSqliteAdapter } from '../src/adapters/betterSqliteAdapter';
 import { CloudBackupManager, S3StorageProvider, type CloudStorageProvider } from '../src/features/backup/cloudBackup';
 
 /**
@@ -40,13 +42,30 @@ describe('CloudBackupManager', () => {
   let db: Awaited<ReturnType<typeof createDatabase>>;
   let storage: MockStorageProvider;
 
+  const createTestDatabase = async () => {
+    try {
+      return await createDatabase({ type: 'memory' });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('better-sqlite3 module is not available')) {
+        const adapter = createSqlJsAdapter();
+        await adapter.open();
+        return adapter;
+      }
+      throw error;
+    }
+  };
+
   beforeEach(async () => {
-    db = await createDatabase({ type: 'memory' });
+    db = await createTestDatabase();
     await db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)');
     await db.run('INSERT INTO users (name) VALUES (?)', ['Alice']);
     await db.run('INSERT INTO users (name) VALUES (?)', ['Bob']);
     
     storage = new MockStorageProvider();
+  });
+
+  afterEach(async () => {
+    await db.close();
   });
 
   describe('Manual Backups', () => {
@@ -252,19 +271,24 @@ describe('CloudBackupManager', () => {
 
   describe('Scheduled Backups', () => {
     it('should start and stop scheduled backups', async () => {
+      vi.useFakeTimers();
       const onSuccess = vi.fn();
       const manager = new CloudBackupManager(db, storage, {
         interval: 100,
         onSuccess
       });
-      
-      manager.start();
-      
-      // Wait for at least 2 backups
-      await new Promise(resolve => setTimeout(resolve, 250));
-      
-      manager.stop();
-      
+
+      try {
+        manager.start();
+
+        // Advance time to trigger multiple scheduled backups deterministically
+        await vi.advanceTimersByTimeAsync(300);
+        await Promise.resolve();
+      } finally {
+        manager.stop();
+        vi.useRealTimers();
+      }
+
       expect(onSuccess).toHaveBeenCalled();
       expect(onSuccess.mock.calls.length).toBeGreaterThanOrEqual(2);
     });

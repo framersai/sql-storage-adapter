@@ -1,399 +1,152 @@
-<p align="center">
-  <a href="https://frame.dev" target="_blank" rel="noopener">
-    <img src="./logos/frame-wordmark.svg" alt="Frame logo" width="320">
-  </a>
-</p>
-
 # SQL Storage Adapter
 
-[![npm version](https://img.shields.io/npm/v/@framers/sql-storage-adapter.svg)](https://www.npmjs.com/package/@framers/sql-storage-adapter)
-[![CI](https://github.com/framersai/sql-storage-adapter/actions/workflows/ci.yml/badge.svg)](https://github.com/framersai/sql-storage-adapter/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/framersai/sql-storage-adapter/branch/master/graph/badge.svg)](https://codecov.io/gh/framersai/sql-storage-adapter)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://www.typescriptlang.org/)
+A modular persistence layer for AgentOS that exposes a consistent database interface across multiple storage backends. It allows services, CLIs, and tests to share the same CRUD and transaction APIs while targeting SQLite (via `better-sqlite3`), Postgres, in-memory mocks, and cloud-hosted providers.
 
-> One SQL interface for Node.js, browsers, and mobile apps. Write your database code once, run it anywhere.
+## Overview
 
-**[Documentation](https://framersai.github.io/sql-storage-adapter/)** | **[GitHub](https://github.com/framersai/sql-storage-adapter)** | **[NPM](https://www.npmjs.com/package/@framers/sql-storage-adapter)** | **[Changelog](./CHANGELOG.md)** | **[Frame.dev](https://frame.dev)**
+- **Purpose**: Offer a unified abstraction so AgentOS components can swap storage backends without code changes.
+- **Core abstractions**: `src/core` contains the `Database`, `StorageAdapter`, and `AdapterResolver` contracts that power higher-level helpers such as `createDatabase()`.
+- **Concrete adapters**: `src/adapters/**` implements backends. Each adapter handles `open`/`close`, CRUD helpers, transactions, and optional capabilities (e.g., cloud backup or multi-tenant snapshots).
+- **Resolution flow**: `resolveStorageAdapter` inspects runtime configuration (environment variables, explicit options, test hints) and tries adapters in priority order. If none succeed, it throws `StorageResolutionError`. Test utilities typically call `createDatabase()`, which delegates to the resolver.
 
-## Why?
+### Common adapter types
 
-Build apps that work across platforms without rewriting database code:
-- 🖥️ **Desktop** (Electron) - fast local storage with better-sqlite3
-- 🌐 **Web** - in-browser SQL with sql.js (WebAssembly)
-- 📱 **Mobile** (Capacitor/React Native) - native SQLite
-- ☁️ **Server** - PostgreSQL or SQLite
+| Adapter | Description | Typical usage |
+| --- | --- | --- |
+| `BetterSqliteAdapter` | File-backed SQLite using `better-sqlite3`; fast transactions, native module dependency. | CLI runs, developer machines, CI when native deps are available. |
+| `MemoryAdapter` | Pure TypeScript fallback with limited durability. | Unit tests, environments where native modules cannot compile. |
+| Cloud adapters | Wrap hosted SQLite/Postgres vendors, using secrets for auth. | Production deployments, remote snapshots, multi-region data. |
 
-```typescript
-import { createDatabase } from '@framers/sql-storage-adapter';
+## Common Pain Points
 
-// Auto-picks the best adapter for your environment
-const db = await createDatabase();
+### Native dependency (`better-sqlite3`)
 
-// Same code everywhere
-await db.run('INSERT INTO users (name) VALUES (?)', ['Alice']);
-const user = await db.get('SELECT * FROM users WHERE id = ?', [1]);
-```
+`better-sqlite3` requires native build tooling when prebuilt binaries are unavailable.
 
-## Installation
+- Install prerequisites first: Python 3.7+, `make`, `g++`, `libssl-dev` (or system equivalents).
+- GitHub Actions runners frequently fail if Node.js versions mismatch (module compiled for Node 18 but runtime is Node 20+).
+- Installing with `pnpm install --no-optional` skips the dependency, causing the resolver to fail when it tries to `require('better-sqlite3')`.
+- Recommended mitigations:
+  - Ensure the job installs build tools before `pnpm install`.
+  - Pin Node.js to a version with prebuilt binaries when possible.
+  - Keep `better-sqlite3` in `dependencies`, not `optionalDependencies`.
+  - Run `pnpm rebuild better-sqlite3` when upgrading Node.js.
+
+### Adapter resolution misconfiguration
+
+- If no environment flag is set, the resolver may default to `better-sqlite3` even in browser builds. Explicitly set `STORAGE_ADAPTER=memory` (or another valid value) for CI or bundlers.
+- New adapters must be registered in `resolver.ts`; missing registrations surface as runtime errors during resolution.
+
+### Cloud backup tests
+
+- `tests/cloudBackup.spec.ts` opens real database handles. Without `better-sqlite3`, the suite fails. Skip or parameterise the spec when running adapters that cannot support the scenario.
+- Ensure tests close connections to avoid locked database errors in subsequent runs.
+
+### Subtree mirrors and repo splits
+
+The package is sometimes mirrored out of the monorepo via `git subtree`.
+
+- Rewrites or mirror script runs (`mirror-subtrees.sh`) can desynchronise lock files and workflows.
+- Keep `pnpm-lock.yaml` checked in so GitHub Actions caching works. Without it, setup steps abort because the lock file is missing.
+
+### Version pinning and hoisting
+
+- `better-sqlite3` ABI changes frequently. Build locally with Node 18 but deploy with Node 20 and the adapter may break.
+- Align Node.js versions across development, CI, and production.
+- When hoisting with pnpm or during subtree splits, verify `package.json` inside the adapter lists all required dependencies explicitly.
+
+## Recommended Practices
+
+### CI setup
+
+- Before `pnpm install`, run `sudo apt-get update && sudo apt-get install -y build-essential python3` (or the platform-appropriate equivalent).
+- Pin Node.js via `actions/setup-node` to match local development (commonly Node 20.x).
+- Use `pnpm install --frozen-lockfile` and ensure the lock file lives alongside the package.
+- Add a sanity check after install: `node -e "require('better-sqlite3')"` so native load issues fail fast.
+- For lightweight lint or unit runs where native modules are unnecessary, set `STORAGE_ADAPTER=memory` in the job environment and reserve full adapter coverage for dedicated workflows.
+
+### Testing strategy
+
+- Parameterise tests to run against both `memory` and `better-sqlite3` adapters to catch backend-specific regressions while keeping unit runs fast.
+- Provide helpers like `createTestDatabase(adapterName = 'memory')` so suites can override adapters centrally.
+- In Vitest/Jest setup, catch resolution failures and fall back to memory for non-critical suites, logging the reason to aid diagnostics.
+
+### Module usage
+
+- Consumers should rely on high-level factories (`createDatabase`, `openStorage`) and pass configuration (file paths, credentials) via options or environment variables.
+- Only instantiate adapters directly for advanced tuning.
+- When distributing the adapter standalone, expose relevant types (`AdapterOptions`, `ResolvedDatabase`) and document required environment variables.
+
+### Documentation
+
+- Keep this README aligned with adapter capabilities, installation requirements, and troubleshooting tips.
+- Document platform-specific caveats (e.g., Windows requires Visual Studio Build Tools for `better-sqlite3`).
+- Highlight common error messages (such as "module 'better-sqlite3' was not found") and the corresponding fixes.
+
+### Release engineering
+
+- When splitting the monorepo, include `pnpm-lock.yaml` or `package-lock.json` in the exported repository to satisfy CI.
+- After rewriting history, re-run `mirror-subtrees.sh --push` and verify the standalone adapter CI before tagging a release.
+
+## Getting Started
 
 ```bash
-npm install @framers/sql-storage-adapter
+# Install dependencies within the monorepo root
+pnpm install
 
-# Install adapters you need:
-npm install better-sqlite3      # Desktop (Node.js/Electron)
-npm install pg                  # PostgreSQL (servers)
-npm install @capacitor-community/sqlite  # Mobile (Capacitor)
-# sql.js included - no extra install needed
+# Build the SQL storage adapter package
+pnpm --filter sql-storage-adapter build
+
+# Run tests (defaults to memory adapter unless overridden)
+STORAGE_ADAPTER=memory pnpm --filter sql-storage-adapter test
 ```
 
-## Quick Start
+Sample usage from an AgentOS service:
 
 ```typescript
-import { createDatabase } from '@framers/sql-storage-adapter';
+import { createDatabase } from '@agentos/sql-storage-adapter';
 
-// Create database (auto-detects best option)
-const db = await createDatabase();
+async function bootstrap() {
+  const db = await createDatabase({
+    priority: ['better-sqlite3', 'memory'],
+    filePath: './agentos.sqlite'
+  });
 
-// Create table
-await db.exec(`
-  CREATE TABLE IF NOT EXISTS todos (
-    id INTEGER PRIMARY KEY,
-    task TEXT NOT NULL,
-    done INTEGER DEFAULT 0
-  )
-`);
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS conversations (
+      id TEXT PRIMARY KEY,
+      payload JSONB NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
-// Insert data
-await db.run('INSERT INTO todos (task) VALUES (?)', ['Buy groceries']);
+  await db.run(
+    'INSERT INTO conversations (id, payload) VALUES (?, ?)',
+    ['conv-1', JSON.stringify({ message: 'hello world' })]
+  );
 
-// Query data
-const todos = await db.all('SELECT * FROM todos WHERE done = 0');
+  const row = await db.get('SELECT payload FROM conversations WHERE id = ?', ['conv-1']);
+  console.log(row?.payload);
 
-// Clean up
-await db.close();
-```
-
-## Project Structure
-
-```
-src/
-  adapters/            # Storage backends (better-sqlite3, postgres, sql.js, supabase, ...)
-  core/                # Fundamental contracts, resolver, and database APIs
-  features/
-    backup/            # Cloud backup manager
-    migrations/        # Export/import helpers
-    sync/              # Offline/online sync manager
-  shared/              # Cross-cutting helpers (e.g. parameter normalisation)
-  types/               # Type-only re-export entrypoints
-```
-
-The new layout makes it easier to jump between low-level contracts and higher-level features, and keeps optional tooling out of the critical path for runtime adapters.
-
-## Core API
-
-```typescript
-// Execute SQL (no results)
-await db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)');
-
-// Run mutation (INSERT/UPDATE/DELETE)
-const result = await db.run('INSERT INTO users (name) VALUES (?)', ['Alice']);
-console.log(result.lastInsertRowid);  // Auto-increment ID
-
-// Get single row
-const user = await db.get<User>('SELECT * FROM users WHERE id = ?', [1]);
-
-// Get all rows
-const users = await db.all<User>('SELECT * FROM users');
-
-// Transactions (automatic commit/rollback)
-await db.transaction(async (tx) => {
-  await tx.run('INSERT INTO users (name) VALUES (?)', ['Bob']);
-  await tx.run('INSERT INTO posts (user_id, title) VALUES (?, ?)', [1, 'Hello']);
-});
-
-// Batch operations (if supported)
-if (db.capabilities.has('batch')) {
-  await db.batch([
-    { statement: 'INSERT INTO users (name) VALUES (?)', parameters: ['Alice'] },
-    { statement: 'INSERT INTO users (name) VALUES (?)', parameters: ['Bob'] }
-  ]);
+  await db.close();
 }
 
-// Close connection
-await db.close();
-```
-
-## Adapter Selection
-
-Auto-detection order:
-
-```
-🖥️ Node.js:     better-sqlite3 → sql.js
-🌐 Browser:     sql.js
-📱 Mobile:      capacitor-sqlite → sql.js
-☁️ Server:      postgres → better-sqlite3 → sql.js
-```
-
-Override with specific adapter:
-
-```typescript
-// Use PostgreSQL explicitly
-const db = await createDatabase({ 
-  url: 'postgresql://localhost/mydb' 
-});
-
-// Use SQLite explicitly
-const db = await createDatabase({ 
-  file: './app.db' 
-});
-
-// Custom priority
-const db = await createDatabase({
-  priority: ['postgres', 'better-sqlite3'],
-  postgres: { connectionString: process.env.DATABASE_URL },
-  filePath: './fallback.db'
+bootstrap().catch((err) => {
+  console.error('Database bootstrap failed', err);
+  process.exit(1);
 });
 ```
 
-## Auto-Sync & Offline Support
+## Troubleshooting Checklist
 
-Build offline-first apps with automatic cloud sync:
+- [ ] `better-sqlite3` loads successfully (run the sanity script).
+- [ ] `STORAGE_ADAPTER` is set for CI/browser builds when native modules are unavailable.
+- [ ] Tests clean up database handles, especially for cloud backup specs.
+- [ ] Lock files are committed alongside subtree mirrors.
+- [ ] Node.js version matches the compiled adapter binaries across environments.
 
-```typescript
-import { createSyncManager } from '@framers/sql-storage-adapter';
+## Additional Resources
 
-const manager = await createSyncManager({
-  primary: './app.db',                     // Local SQLite
-  remote: process.env.DATABASE_URL,        // Cloud PostgreSQL
-  sync: {
-    mode: 'auto',                          // Auto-sync after writes
-    conflictStrategy: 'last-write-wins'
-  }
-});
-
-// Work offline
-await manager.db.run('INSERT INTO tasks (title) VALUES (?)', ['Buy milk']);
-
-// Sync manually when needed
-const result = await manager.sync();
-console.log(`Synced ${result.recordsSynced} records`);
-```
-
-**Sync Modes:**
-- `manual` - Call `sync()` explicitly (default)
-- `auto` - Syncs after writes (debounced)
-- `periodic` - Syncs every N seconds
-- `realtime` - Syncs immediately on every write
-- `on-reconnect` - Syncs when network returns
-
-**Conflict Strategies:**
-- `last-write-wins` - Newest timestamp wins (default)
-- `local-wins` - Local always wins
-- `remote-wins` - Server is authority
-- `merge` - Custom merge function
-- `keep-both` - Duplicate records
-
-📖 **[Complete Offline Sync Guide](./guides/OFFLINE_SYNC.md)** - 8 real-world examples with mobile optimization
-
-## Cloud Backups
-
-Automatic S3-compatible backups (AWS S3, Cloudflare R2, MinIO):
-
-```typescript
-import { S3Client } from '@aws-sdk/client-s3';
-import { createCloudBackupManager } from '@framers/sql-storage-adapter';
-
-const s3 = new S3Client({
-  region: 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!
-  }
-});
-
-const manager = createCloudBackupManager(db, s3, 'my-backups', {
-  interval: 3600000,  // Hourly backups
-  maxBackups: 24,     // Keep 24 backups
-  options: { compression: 'gzip' }
-});
-
-manager.start();  // Auto-backup every hour
-
-// Manual backup
-await manager.backupNow();
-
-// Restore
-await manager.restore('backups/my-database-2024-01-15.json.gz');
-```
-
-## Data Migration
-
-Export, import, and migrate between adapters:
-
-```typescript
-import { 
-  migrateLocalToSupabase,
-  exportAsJSON,
-  importFromJSON 
-} from '@framers/sql-storage-adapter';
-
-// Export to JSON
-const backup = await exportAsJSON(db, { 
-  tables: ['users', 'posts'],
-  includeSchema: true 
-});
-
-// Import from JSON
-await importFromJSON(db, backup, {
-  dropTables: true,
-  batchSize: 100
-});
-
-// Migrate SQLite → PostgreSQL
-const result = await migrateLocalToSupabase(sqliteDb, postgresDb, {
-  verify: true,
-  onConflict: 'replace'
-});
-
-console.log(`Migrated ${result.rowsImported} rows in ${result.duration}ms`);
-```
-
-## PostgreSQL Remote Connections
-
-Connect to hosted databases (AWS RDS, Heroku, Supabase, etc.):
-
-```typescript
-import { connectDatabase } from '@framers/sql-storage-adapter';
-
-// Auto-detect from DATABASE_URL
-const db = await connectDatabase(process.env.DATABASE_URL);
-
-// Or configure explicitly
-const db = await connectDatabase({
-  host: 'db.example.com',
-  database: 'myapp',
-  user: 'dbuser',
-  password: process.env.DB_PASSWORD,
-  ssl: true,
-  max: 20  // Connection pool size
-});
-
-// Same API as SQLite!
-const users = await db.all('SELECT * FROM users');
-```
-
-📖 **[PostgreSQL Remote Guide](./guides/POSTGRES_REMOTE_CONNECTION.md)** - Cloud provider examples & SSL config
-
-## Adapter Comparison
-
-| Adapter | Best For | Speed | Size | Concurrent |
-|---------|----------|-------|------|------------|
-| **PostgreSQL** | Production servers | ⚡⚡⚡ | N/A | ✅ Yes |
-| **better-sqlite3** | Desktop apps | ⚡⚡⚡ | 6 MB | ❌ No |
-| **SQL.js** | Browsers | ⚡ | 2.3 MB | ❌ No |
-| **Capacitor** | Mobile apps | ⚡⚡⚡ | ~1 MB | ❌ No |
-
-## TypeScript Support
-
-Full type safety with generics:
-
-```typescript
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-
-// Type-safe queries
-const user = await db.get<User>('SELECT * FROM users WHERE id = ?', [1]);
-// user: User | null
-
-const users = await db.all<User>('SELECT * FROM users');
-// users: User[]
-
-// Runtime introspection
-const context = db.context;
-console.log('Adapter:', db.kind);
-console.log('Capabilities:', Array.from(db.capabilities));
-console.log('Max connections:', context.getLimitations().maxConnections);
-```
-
-Type-only imports are now available via the dedicated entrypoint:
-
-```typescript
-import type { StorageAdapterCapabilities } from '@framers/sql-storage-adapter/types';
-```
-
-## Event Monitoring
-
-Track queries and performance:
-
-```typescript
-db.events.on('query:error', (event) => {
-  console.error('Query failed:', event.statement, event.error);
-});
-
-db.events.on('performance:slow-query', (event) => {
-  if (event.duration > 1000) {
-    console.warn(`Slow query (${event.duration}ms):`, event.statement);
-  }
-});
-
-db.events.on('transaction:rollback', (event) => {
-  console.warn('Transaction rolled back:', event.error);
-});
-```
-
-## Examples
-
-Real-world usage in `examples/`:
-- `basic-usage.ts` - Getting started
-- `remote-postgres.ts` - Cloud database connections
-- `electron-app/` - Desktop app with better-sqlite3
-- `browser-extension/` - Chrome extension with SQL.js
-- `full-stack/` - Shared code frontend/backend
-- `offline-sync.ts` - Auto-sync patterns
-- `testing/` - Unit testing strategies
-
-## FAQ
-
-**Q: Which adapter should I use?**  
-Use `createDatabase()` - it auto-picks the best adapter for your environment.
-
-**Q: Can I switch adapters later?**  
-Yes. Use migration functions to move data between adapters.
-
-**Q: Is this production-ready?**  
-Yes. Built on battle-tested libraries (pg, better-sqlite3, sql.js). The adapter layer adds <1% overhead.
-
-**Q: What about schema migrations?**  
-Use any migration tool: [`node-pg-migrate`](https://github.com/salsita/node-pg-migrate), [`prisma`](https://www.prisma.io/), or raw SQL.
-
-**Q: How do I handle conflicts in sync?**  
-Use `conflictStrategy`: `last-write-wins` (default), `local-wins`, `remote-wins`, `merge`, or `keep-both`.
-
-**Q: Can I sync only on WiFi?**  
-Yes. Use `mode: 'manual'` and call `sync()` when `isOnWiFi === true`. See [Offline Sync Guide](./guides/OFFLINE_SYNC.md#1-mobile-app-with-wifi-only-sync).
-
-## Documentation
-
-- **[API Documentation](https://framersai.github.io/sql-storage-adapter/)** - Complete TypeDoc reference
-- **[Offline Sync Guide](./guides/OFFLINE_SYNC.md)** - Comprehensive sync patterns
-- **[PostgreSQL Guide](./guides/POSTGRES_REMOTE_CONNECTION.md)** - Remote database setup
-- **[Architecture](./ARCHITECTURE.md)** - Design decisions
-
-## Contributing
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md)
-
-## License
-
-MIT © [The Framers](https://frame.dev)
-
----
-
-<p align="center">
-  <a href="https://frame.dev" target="_blank" rel="noopener">
-    <img src="./logos/frame-wordmark.svg" alt="Frame.dev wordmark" width="200">
-  </a>
-</p>
+- `backend/README.md` for end-to-end service integration notes.
+- `docs/AGENTOS_SERVER_API.md` for API-level expectations when swapping adapters.
+- `scripts/mirror-subtrees.sh` for guidance on mirroring packages out of the monorepo.
