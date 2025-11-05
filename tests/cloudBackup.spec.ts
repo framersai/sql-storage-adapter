@@ -5,7 +5,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createDatabase } from '../src/core/database';
 import { createSqlJsAdapter } from '../src/adapters/sqlJsAdapter';
-import { createBetterSqliteAdapter } from '../src/adapters/betterSqliteAdapter';
 import { CloudBackupManager, S3StorageProvider, type CloudStorageProvider } from '../src/features/backup/cloudBackup';
 
 /**
@@ -51,6 +50,11 @@ describe('CloudBackupManager', () => {
         await adapter.open();
         return adapter;
       }
+      if (error instanceof Error && error.message.includes('sql.js')) {
+        const adapter = createSqlJsAdapter();
+        await adapter.open();
+        return adapter;
+      }
       throw error;
     }
   };
@@ -65,7 +69,9 @@ describe('CloudBackupManager', () => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db) {
+      await db.close();
+    }
   });
 
   describe('Manual Backups', () => {
