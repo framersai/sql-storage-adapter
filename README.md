@@ -28,7 +28,6 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 - [Adapter Matrix](#adapter-matrix)
 - [Configuration & Resolution](#configuration--resolution)
 - [CI, Releases, and Badges](#ci-releases-and-badges)
-- [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -54,6 +53,8 @@ npm install @capacitor-community/sqlite  # Capacitor / mobile
 ```
 
 > Windows users: ensure the Visual Studio Build Tools (C++ workload) are installed before adding `better-sqlite3`. On Linux, install `python3`, `build-essential`, and `libssl-dev` prior to `npm install`.
+
+> Note: If `better-sqlite3` cannot be required, install native build tools before `npm install`, ensure your Node version matches available prebuilt binaries, or fall back to `sql.js` by setting `STORAGE_ADAPTER=sqljs`.
 
 ## Quick Start
 
@@ -122,13 +123,7 @@ main().catch((error) => {
   ```
 - See [RELEASING.md](./RELEASING.md) for the automated release flow, required secrets (`NPM_TOKEN`), and manual fallback steps.
 
-## Troubleshooting
-
-- **`better-sqlite3` cannot be required** – install native build tools before `npm install`, ensure Node version matches prebuilt binaries, or fall back to sql.js by setting `STORAGE_ADAPTER=sqljs`.
-- **Adapter resolution picks the wrong backend** – set `priority` or `STORAGE_ADAPTER` explicitly; register new adapters in `src/core/resolver.ts`.
-- **Cloud backup tests lock the database** – call `await db.close()` in test teardown; use the in-memory/sql.js fallback on runners without native SQLite.
-- **GitHub release missing** – confirm `release.yml` succeeded, `NPM_TOKEN` is configured, and the version bump is committed. Rerun the workflow if needed.
-- **Missing lock file in subtree mirror** – keep `pnpm-lock.yaml` committed so CI caches dependencies correctly when this package is mirrored out of a monorepo.
+ 
 
 ## Contributing
 
