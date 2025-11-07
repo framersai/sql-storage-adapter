@@ -430,7 +430,7 @@ export class IndexedDbAdapter implements StorageAdapter {
    */
   private prepareInternal(statement: string) {
     this.ensureOpen();
-    return this.db.prepare(statement);
+    return this.db!.prepare(statement);
   }
 }
 
