@@ -8,6 +8,7 @@ export * from './core/resolver';
 // Adapter implementations ----------------------------------------------------
 export * from './adapters/betterSqliteAdapter';
 export * from './adapters/sqlJsAdapter';
+export * from './adapters/indexedDbAdapter';
 export * from './adapters/capacitorSqliteAdapter';
 export * from './adapters/postgresAdapter';
 export * from './adapters/supabase';

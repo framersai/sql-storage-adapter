@@ -177,9 +177,17 @@ export class BetterSqliteAdapter implements StorageAdapter {
 
   public async transaction<T>(fn: (trx: StorageAdapter) => Promise<T>): Promise<T> {
     this.ensureOpen();
-    const db = this.db!;
-    const wrap = db.transaction(async () => fn(this));
-    return wrap();
+    // Manual transactional control to support async callback semantics
+    // without violating better-sqlite3's sync transaction callback contract.
+    this.db!.exec('BEGIN');
+    try {
+      const result = await fn(this);
+      this.db!.exec('COMMIT');
+      return result;
+    } catch (error) {
+      try { this.db!.exec('ROLLBACK'); } catch { /* ignore rollback errors */ }
+      throw error;
+    }
   }
 
   public async close(): Promise<void> {
