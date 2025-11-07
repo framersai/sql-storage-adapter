@@ -2,12 +2,10 @@
 
 <p align="center">
   <a href="https://frame.dev" target="_blank" rel="noopener">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./logos/frame-square-blue-dark-no-tagline.svg">
-      <source media="(prefers-color-scheme: light)" srcset="./logos/frame-square-blue-no-tagline.svg">
-      <img src="./logos/frame-square-blue-no-tagline.svg" alt="Frame.dev" width="200">
-    </picture>
+    <img src="https://avatars.githubusercontent.com/u/184314983?s=400&u=02bc60d3f02d586a9ed526e394162651192670c1&v=4" alt="Frame.dev" width="120" style="border-radius: 12px;">
   </a>
+  <br>
+  <small>by <a href="https://frame.dev" target="_blank" rel="noopener">Frame.dev</a></small>
 </p>
 
 [![npm version](https://img.shields.io/npm/v/@framers/sql-storage-adapter.svg?logo=npm&label=npm)](https://www.npmjs.com/package/@framers/sql-storage-adapter)
@@ -237,5 +235,5 @@ See [**PLATFORM_STRATEGY.md**](./PLATFORM_STRATEGY.md) for a comprehensive guide
 ---
 
 <p align="center">
-  Built and maintained by <a href="https://frame.dev" target="_blank" rel="noopener">Frame.dev</a>
+  Built and maintained by <a href="https://frame.dev" target="_blank" rel="noopener"><strong>Frame.dev</strong></a>
 </p>
