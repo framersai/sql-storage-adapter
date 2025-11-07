@@ -58,6 +58,7 @@ export interface IndexedDbAdapterOptions {
   /** Save interval in milliseconds for batched writes (default: 5000) */
   saveIntervalMs?: number;
   /** sql.js configuration (e.g., locateFile for wasm) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sqlJsConfig?: any;
 }
 
@@ -103,6 +104,7 @@ export class IndexedDbAdapter implements StorageAdapter {
   private readonly storeName: string;
   private readonly autoSave: boolean;
   private readonly saveIntervalMs: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly sqlJsConfig: any;
 
   constructor(options: IndexedDbAdapterOptions = {}) {
@@ -117,7 +119,7 @@ export class IndexedDbAdapter implements StorageAdapter {
    * Opens IndexedDB and initializes sql.js database.
    * Loads existing database from IndexedDB if present.
    */
-  public async open(options?: StorageOpenOptions): Promise<void> {
+  public async open(_options?: StorageOpenOptions): Promise<void> {
     if (this.db) {
       return; // Already open
     }
@@ -209,6 +211,7 @@ export class IndexedDbAdapter implements StorageAdapter {
 
       while (stmt.step()) {
         const row = stmt.get();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const obj: any = {};
         columnNames.forEach((col, idx) => {
           obj[col] = row[idx];

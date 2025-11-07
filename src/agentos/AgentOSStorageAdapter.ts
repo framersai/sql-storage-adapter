@@ -57,7 +57,7 @@
  * ```
  */
 
-import type { StorageAdapter, StorageOpenOptions } from '../core/contracts';
+import type { StorageAdapter } from '../core/contracts';
 import { resolveStorageAdapter, type StorageResolutionOptions } from '../core/resolver';
 import type { AdapterKind } from '../core/contracts/context';
 
@@ -165,6 +165,7 @@ function detectPlatform(): AgentOSPlatform {
   // Browser environments
   if (typeof window !== 'undefined') {
     // Capacitor native apps
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((window as any).Capacitor?.isNativePlatform?.()) {
       return 'capacitor';
     }
@@ -329,6 +330,7 @@ export class AgentOSStorageAdapter {
        * Saves a conversation with its events.
        * Creates the conversation if it doesn't exist, updates if it does.
        */
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       save: async (id: string, userId: string, personaId: string, events: any[]) => {
         const now = Date.now();
         await this.adapter.run(
@@ -411,6 +413,7 @@ export class AgentOSStorageAdapter {
       /**
        * Saves a session (creates or updates).
        */
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       save: async (id: string, userId: string, displayName: string, targetType: 'persona' | 'agency', targetId: string, metadata?: Record<string, any>) => {
         const now = Date.now();
         await this.adapter.run(
@@ -486,6 +489,7 @@ export class AgentOSStorageAdapter {
       /**
        * Caches a persona definition (creates or updates).
        */
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       cache: async (id: string, displayName: string, definition: any) => {
         const now = Date.now();
         await this.adapter.run(

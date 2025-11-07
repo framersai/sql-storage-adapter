@@ -1,31 +1,37 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { IndexedDbAdapter } from '../indexedDbAdapter';
 
 // Mock IndexedDB for Node.js tests
 const setupIndexedDbMock = () => {
-  const stores: Map<string, Map<string, any>> = new Map();
+  const stores: Map<string, Map<string, unknown>> = new Map();
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (global as any).indexedDB = {
-    open: (name: string, version: number) => {
+    open: (_name: string, _version: number) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const req: any = {
         result: {
           objectStoreNames: { contains: () => false },
-          createObjectStore: (storeName: string) => {
-            stores.set(storeName, new Map());
+          createObjectStore: (_storeName: string) => {
+            stores.set(_storeName, new Map());
           },
-          transaction: (storeName: string, mode: string) => ({
+          transaction: (_storeName: string, _mode: string) => ({
             objectStore: (name: string) => {
               const store = stores.get(name) || new Map();
               return {
                 get: (key: string) => ({
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   onsuccess: null as any,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   onerror: null as any,
                   result: store.get(key),
                 }),
-                put: (value: any, key: string) => {
+                put: (value: unknown, key: string) => {
                   store.set(key, value);
                   return {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     onsuccess: null as any,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     onerror: null as any,
                   };
                 },
