@@ -1,6 +1,6 @@
 {
   "name": "@framers/sql-storage-adapter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Robust cross-platform SQL storage abstraction with automatic fallbacks and runtime detection",
   "type": "module",
   "main": "dist/index.js",
@@ -16,6 +16,11 @@
       "types": "./dist/types/index.d.ts",
       "import": "./dist/types/index.js",
       "default": "./dist/types/index.js"
+    },
+    "./agentos": {
+      "types": "./dist/agentos/index.d.ts",
+      "import": "./dist/agentos/index.js",
+      "default": "./dist/agentos/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -52,10 +57,14 @@
     "capacitor",
     "sql.js",
     "better-sqlite3",
+    "indexeddb",
     "typescript",
     "cross-platform",
     "fallback",
-    "webassembly"
+    "webassembly",
+    "agentos",
+    "pwa",
+    "offline-first"
   ],
   "author": "Framers (https://frame.dev)",
   "license": "MIT",
