@@ -213,7 +213,7 @@ export class IndexedDbAdapter implements StorageAdapter {
         const row = stmt.get();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const obj: any = {};
-        columnNames.forEach((col, idx) => {
+        columnNames.forEach((col: string, idx: number) => {
           obj[col] = row[idx];
         });
         results.push(obj as T);
@@ -222,6 +222,34 @@ export class IndexedDbAdapter implements StorageAdapter {
       return results;
     } finally {
       stmt.free();
+    }
+  }
+
+  /**
+   * Executes a script containing multiple SQL statements.
+   */
+  public async exec(script: string): Promise<void> {
+    this.ensureOpen();
+    this.db!.exec(script);
+    this.dirty = true;
+    await this.persistIfNeeded();
+  }
+
+  /**
+   * Executes a callback within a database transaction.
+   */
+  public async transaction<T>(fn: (trx: StorageAdapter) => Promise<T>): Promise<T> {
+    this.ensureOpen();
+    await this.run('BEGIN TRANSACTION');
+    try {
+      const result = await fn(this);
+      await this.run('COMMIT');
+      this.dirty = true;
+      await this.persistIfNeeded();
+      return result;
+    } catch (error) {
+      await this.run('ROLLBACK');
+      throw error;
     }
   }
 
@@ -378,7 +406,7 @@ export class IndexedDbAdapter implements StorageAdapter {
   /**
    * Ensures the database is open.
    */
-  private ensureOpen(): asserts this is { db: SqlJsDatabase } {
+  private ensureOpen(): void {
     if (!this.db) {
       throw new Error('IndexedDbAdapter: Database not open. Call open() first.');
     }

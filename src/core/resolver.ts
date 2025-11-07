@@ -101,10 +101,13 @@ export const resolveStorageAdapter = async (options: StorageResolutionOptions = 
       case 'indexeddb':
         return {
           name,
-          factory: async () => new IndexedDbAdapter({
-            dbName: options.openOptions?.dbName || 'agentos-db',
-            autoSave: true,
-          })
+          factory: async () => {
+            const adapterOptions = options.openOptions?.adapterOptions as { dbName?: string } | undefined;
+            return new IndexedDbAdapter({
+              dbName: adapterOptions?.dbName || 'agentos-db',
+              autoSave: true,
+            });
+          }
         };
       case 'sqljs':
       default:
