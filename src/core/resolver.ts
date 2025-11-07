@@ -6,6 +6,7 @@ import { createBetterSqliteAdapter } from '../adapters/betterSqliteAdapter';
 import { createSqlJsAdapter } from '../adapters/sqlJsAdapter';
 import { createCapacitorSqliteAdapter, type CapacitorAdapterOptions } from '../adapters/capacitorSqliteAdapter';
 import { createPostgresAdapter } from '../adapters/postgresAdapter';
+import { IndexedDbAdapter } from '../adapters/indexedDbAdapter';
 
 // Re-export AdapterKind for external use
 export type { AdapterKind } from './contracts/context';
@@ -60,12 +61,16 @@ export const resolveStorageAdapter = async (options: StorageResolutionOptions = 
       return [envOverride];
     }
     if (isCapacitorRuntime()) {
-      return ['capacitor', 'sqljs'];
+      return ['capacitor', 'indexeddb', 'sqljs'];
     }
     if (postgresConnection) {
-      return ['postgres', 'better-sqlite3', 'sqljs'];
+      return ['postgres', 'better-sqlite3', 'indexeddb', 'sqljs'];
     }
-    return ['better-sqlite3', 'sqljs'];
+    // Browser detection (check for IndexedDB)
+    if (typeof window !== 'undefined' && window.indexedDB) {
+      return ['indexeddb', 'sqljs'];
+    }
+    return ['better-sqlite3', 'indexeddb', 'sqljs'];
   })();
 
   const candidates: Candidate[] = defaultPriority.map((name) => {
@@ -92,6 +97,14 @@ export const resolveStorageAdapter = async (options: StorageResolutionOptions = 
         return {
           name,
           factory: async () => createCapacitorSqliteAdapter(options.capacitor)
+        };
+      case 'indexeddb':
+        return {
+          name,
+          factory: async () => new IndexedDbAdapter({
+            dbName: options.openOptions?.dbName || 'agentos-db',
+            autoSave: true,
+          })
         };
       case 'sqljs':
       default:

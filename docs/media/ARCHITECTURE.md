@@ -113,38 +113,147 @@ const db = await resolveStorageAdapter({
 });
 ```
 
+### IndexedDB Adapter (Browser-Native)
+
+**Implementation**: sql.js (SQLite WASM) + IndexedDB for persistence
+
+**When to use**:
+- **Browser applications** (primary use case)
+- Progressive Web Apps (PWAs)
+- Offline-first web applications
+- Privacy-first apps (data never leaves browser)
+- When you need automatic persistence without manual save calls
+
+**Pros**:
+- ✅ **Browser-native persistence** (automatic IndexedDB saves)
+- ✅ Async, non-blocking (doesn't freeze UI)
+- ✅ Large storage quota (50MB-1GB+ depending on browser)
+- ✅ Full SQL support via sql.js (SQLite in WebAssembly)
+- ✅ Auto-save batching (reduces IndexedDB overhead)
+- ✅ Export/import support (SQLite file format)
+- ✅ Works offline
+- ✅ No server required
+
+**Cons**:
+- ❌ WASM overhead (~500KB bundle size)
+- ❌ Slower writes than native SQLite (IndexedDB + WASM)
+- ❌ Storage quotas vary by browser (Chrome: 60% of disk, Firefox: 50% of disk)
+- ❌ Single-threaded (no true concurrency)
+- ❌ Browser-only (not available in Node.js)
+
+**Limitations**:
+- IndexedDB quotas can be exceeded (user must grant permission for more)
+- Performance degrades with very large datasets (>100MB)
+- Cannot share databases between tabs/workers (each tab has own instance)
+- No file locking (browser handles concurrency)
+- No native SQLite extensions
+
+**Performance Characteristics**:
+- **Reads**: Fast (in-memory sql.js, ~1-5ms for typical queries)
+- **Writes**: Moderate (IndexedDB persistence adds ~10-50ms per batch)
+- **Auto-save**: Batched every 5s by default (configurable)
+- **Storage**: 50MB-1GB+ (browser-dependent)
+
+**Configuration**:
+```typescript
+const db = await resolveStorageAdapter({
+  priority: ['indexeddb'],
+  // Or use AgentOS-first API:
+  // const storage = await createAgentOSStorage({ platform: 'web' });
+});
+```
+
+**Direct Usage**:
+```typescript
+import { IndexedDbAdapter } from '@framers/sql-storage-adapter';
+
+const adapter = new IndexedDbAdapter({
+  dbName: 'my-app-db',        // IndexedDB database name
+  storeName: 'sqliteDb',      // Object store name
+  autoSave: true,             // Auto-save to IndexedDB after writes
+  saveIntervalMs: 5000,       // Batch writes every 5s
+});
+
+await adapter.open();
+await adapter.run('CREATE TABLE sessions (id TEXT PRIMARY KEY, data TEXT)');
+
+// Auto-saved to IndexedDB automatically
+await adapter.run('INSERT INTO sessions VALUES (?, ?)', ['session-1', '{}']);
+
+// Export for backup
+const backup = adapter.exportDatabase();  // Uint8Array (SQLite file)
+```
+
+**Browser Compatibility**:
+- ✅ Chrome/Edge: 24+ (full support)
+- ✅ Firefox: 16+ (full support)
+- ✅ Safari: 10+ (full support)
+- ✅ Opera: 15+ (full support)
+- ⚠️ IE11: Partial support (use sql.js fallback)
+
+**Storage Quotas**:
+- **Chrome**: 60% of free disk space (typically 1-10GB)
+- **Firefox**: 50% of free disk space (typically 500MB-5GB)
+- **Safari**: 1GB default, can request more
+- **Edge**: Same as Chrome
+
+**Best Practices**:
+1. Enable `autoSave: true` for automatic persistence
+2. Use `saveIntervalMs: 5000` to batch writes (reduces IDB overhead)
+3. Export backups periodically (`adapter.exportDatabase()`)
+4. Handle quota errors gracefully (prompt user to clear old data)
+5. Use transactions for multi-statement operations
+
+---
+
 ### SQL.js Adapter (WebAssembly)
 
 **Implementation**: SQLite compiled to WebAssembly using Emscripten
 
 **When to use**:
-- Browser applications
+- Browser applications (when you need manual control over persistence)
 - Environments without native modules
 - Testing and prototyping
 - When you need guaranteed cross-platform compatibility
+- Serverless edge functions (Cloudflare Workers, Vercel Edge)
 
 **Pros**:
 - ✅ Works everywhere (pure JavaScript/WASM)
 - ✅ No native dependencies
 - ✅ Good for prototyping and testing
-- ✅ Can persist to IndexedDB in browsers
+- ✅ Can persist to IndexedDB in browsers (manual save required)
 - ✅ Consistent behavior across platforms
 - ✅ No compilation required
+- ✅ In-memory fast reads
 
 **Cons**:
 - ❌ 2-10x slower than better-sqlite3
 - ❌ Higher memory usage (WASM overhead)
-- ❌ Large initial download (~2.3MB)
+- ❌ Large initial download (~500KB gzipped)
 - ❌ Limited by browser memory constraints
 - ❌ No true concurrency (single-threaded)
+- ❌ **Manual persistence** (must call `save()` to IndexedDB)
 
 **Limitations**:
-- In-memory by default (data lost on refresh)
+- In-memory by default (data lost on refresh unless manually saved)
 - Browser storage limits (50-80% of free disk, typically 50MB-2GB)
 - No file locking
 - No native extensions support
 - Cannot share databases between tabs/workers
 - Performance degrades with large datasets (>100MB)
+- **Must manually persist to IndexedDB** (unlike IndexedDbAdapter which auto-saves)
+
+**Comparison: IndexedDB Adapter vs SQL.js Adapter**
+
+| Feature | IndexedDB Adapter | SQL.js Adapter |
+|---------|------------------|----------------|
+| **Persistence** | ✅ Automatic | ⚠️ Manual (`save()` required) |
+| **Auto-save** | ✅ Yes (batched) | ❌ No |
+| **Bundle Size** | Same (~500KB) | Same (~500KB) |
+| **Performance** | Same (both use sql.js) | Same |
+| **Use Case** | Production web apps | Prototyping, edge functions |
+
+**Recommendation**: Use **IndexedDB Adapter** for production web apps (automatic persistence). Use **SQL.js Adapter** only if you need manual control over save timing.
 
 **Configuration**:
 ```typescript
@@ -238,19 +347,19 @@ type StorageCapability =
 
 ### Capability Matrix
 
-| Capability | PostgreSQL | better-sqlite3 | SQL.js | Capacitor |
-|------------|------------|----------------|--------|-----------|
-| sync | ❌ | ✅ | ❌ | ❌ |
-| transactions | ✅ | ✅ | ✅ | ✅ |
-| wal | ❌ | ✅ | ❌ | ✅ |
-| locks | ✅ | ✅ | ❌ | ✅ |
-| persistence | ✅ | ✅ | ⚠️* | ✅ |
-| streaming | 🚧 | 🚧 | ❌ | ❌ |
-| batch | ✅ | ✅ | ⚠️** | ⚠️** |
-| prepared | ✅ | ✅ | ❌ | ❌ |
-| concurrent | ✅ | ❌ | ❌ | ❌ |
-| json | ✅ | ❌ | ❌ | ❌ |
-| arrays | ✅ | ❌ | ❌ | ❌ |
+| Capability | PostgreSQL | better-sqlite3 | SQL.js | IndexedDB | Capacitor |
+|------------|------------|----------------|--------|-----------|-----------|
+| sync | ❌ | ✅ | ❌ | ❌ | ❌ |
+| transactions | ✅ | ✅ | ✅ | ✅ | ✅ |
+| wal | ❌ | ✅ | ❌ | ❌ | ✅ |
+| locks | ✅ | ✅ | ❌ | ❌ | ✅ |
+| persistence | ✅ | ✅ | ⚠️* | ✅ | ✅ |
+| streaming | 🚧 | 🚧 | ❌ | ❌ | ❌ |
+| batch | ✅ | ✅ | ⚠️** | ⚠️** | ⚠️** |
+| prepared | ✅ | ✅ | ❌ | ❌ | ❌ |
+| concurrent | ✅ | ❌ | ❌ | ❌ | ❌ |
+| json | ✅ | ❌ | ❌ | ❌ | ❌ |
+| arrays | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 *SQL.js requires manual persistence  
 **Implemented as sequential operations  

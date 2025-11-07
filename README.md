@@ -18,25 +18,31 @@
 
 > Cross-platform SQL access for Node.js, web, and native runtimes with automatic adapter selection and consistent APIs.
 
-The SQL Storage Adapter provides a single, ergonomic interface over SQLite (native and WASM), PostgreSQL, Capacitor, and in-memory stores. It handles adapter discovery, capability detection, and advanced features like cloud backups so you can focus on your application logic.
+The SQL Storage Adapter provides a single, ergonomic interface over SQLite (native and WASM), PostgreSQL, Capacitor, IndexedDB, and in-memory stores. It handles adapter discovery, capability detection, and advanced features like cloud backups so you can focus on your application logic.
+
+**🆕 NEW:** Full IndexedDB support for browser-native, offline-first web apps!
 
 ---
 
 - [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [AgentOS Integration](#agentos-integration)
 - [Adapter Matrix](#adapter-matrix)
 - [Configuration & Resolution](#configuration--resolution)
+- [Platform Strategy](#platform-strategy)
 - [CI, Releases, and Badges](#ci-releases-and-badges)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Features
 
-- **Auto-detected adapters** – `createDatabase()` inspects environment signals and picks the best backend (native SQLite, PostgreSQL, Capacitor, sql.js, memory, etc.).
+- **Auto-detected adapters** – `createDatabase()` inspects environment signals and picks the best backend (native SQLite, PostgreSQL, Capacitor, sql.js, **IndexedDB**, memory, etc.).
 - **Capability-aware API** – consistent CRUD, transactions, batching, and event hooks across adapters with runtime capability introspection.
+- **🆕 IndexedDB** – Browser-native persistence with sql.js for full SQL support in PWAs and offline-first apps.
 - **Cloud backups & migrations** – built-in backup manager with compression, retention policies, and restore helpers plus migration utilities.
 - **Portable packaging** – optional native dependencies; falls back to pure TypeScript/WASM adapters when native modules are unavailable.
+- **AgentOS-first** – Pre-configured schema, typed queries, and auto-detection for AgentOS deployments.
 - **CI-first design** – Vitest coverage, Codecov integration, and GitHub Actions workflows for linting, testing, releasing, and npm publish/tag automation.
 
 ## Installation
@@ -49,12 +55,13 @@ npm install @framers/sql-storage-adapter
 npm install better-sqlite3            # Native SQLite for Node/Electron
 npm install pg                        # PostgreSQL
 npm install @capacitor-community/sqlite  # Capacitor / mobile
-# sql.js ships with the package (no extra install)
+npm install sql.js                    # WASM SQLite (auto-included for IndexedDB)
+# IndexedDB uses sql.js (no extra install needed)
 ```
 
 > Windows users: ensure the Visual Studio Build Tools (C++ workload) are installed before adding `better-sqlite3`. On Linux, install `python3`, `build-essential`, and `libssl-dev` prior to `npm install`.
 
-> Note: If `better-sqlite3` cannot be required, install native build tools before `npm install`, ensure your Node version matches available prebuilt binaries, or fall back to `sql.js` by setting `STORAGE_ADAPTER=sqljs`.
+> Note: If `better-sqlite3` cannot be required, install native build tools before `npm install`, ensure your Node version matches available prebuilt binaries, or fall back to `sql.js` or `indexeddb` by setting `STORAGE_ADAPTER=sqljs` or `STORAGE_ADAPTER=indexeddb`.
 
 ## Quick Start
 
@@ -86,25 +93,118 @@ main().catch((error) => {
 });
 ```
 
+## AgentOS Integration
+
+### Recommended: `createAgentOSStorage()`
+
+The easiest way to use sql-storage-adapter with AgentOS is the **AgentOS-first API**:
+
+```typescript
+import { createAgentOSStorage } from '@framers/sql-storage-adapter/agentos';
+import { AgentOS } from '@agentos/core';
+
+// Auto-detects platform (web, electron, capacitor, node, cloud)
+const storage = await createAgentOSStorage({
+  platform: 'auto',  // Detects best adapter
+  persistence: true,
+});
+
+const agentos = new AgentOS();
+await agentos.initialize({
+  storageAdapter: storage.getAdapter(),  // 🆕 New field in AgentOSConfig
+  // ... other config
+});
+```
+
+**Features:**
+- ✅ Auto-creates AgentOS tables (conversations, sessions, personas, telemetry)
+- ✅ Platform detection (web → IndexedDB, electron → better-sqlite3, etc.)
+- ✅ Typed query builders for common operations
+- ✅ Graceful degradation (e.g., IndexedDB → sql.js fallback)
+
+### Platform-Specific Examples
+
+```typescript
+// Web (Browser): Uses IndexedDB
+const webStorage = await createAgentOSStorage({ platform: 'web' });
+
+// Desktop (Electron): Uses better-sqlite3
+const desktopStorage = await createAgentOSStorage({ platform: 'electron' });
+
+// Mobile (Capacitor): Uses native SQLite
+const mobileStorage = await createAgentOSStorage({ platform: 'capacitor' });
+
+// Cloud (Node): Uses PostgreSQL
+const cloudStorage = await createAgentOSStorage({ 
+  platform: 'cloud',
+  postgres: { connectionString: process.env.DATABASE_URL }
+});
+```
+
+See [Platform Strategy Guide](./docs/PLATFORM_STRATEGY.md) for detailed pros/cons and architecture.
+
 ## Adapter Matrix
 
 | Adapter | Package | Ideal for | Pros | Considerations |
 | --- | --- | --- | --- | --- |
+| **🆕 `indexeddb`** | bundled | **Browsers, PWAs** | Browser-native, async, 50MB-1GB+ quota, SQL via sql.js, offline-first | IndexedDB quotas vary, WASM overhead for SQL |
 | `better-sqlite3` | `better-sqlite3` | Node/Electron, CLI, CI | Native performance, transactional semantics, WAL support | Needs native toolchain; version must match Node ABI |
 | `postgres` | `pg` | Hosted or on-prem PostgreSQL | Connection pooling, rich SQL features, cloud friendly | Requires `DATABASE_URL`/credentials |
 | `sqljs` | bundled | Browsers, serverless edge, native fallback | Pure WASM, no native deps | Write performance limited vs native, optional persistence |
-| `capacitor` | `@capacitor-community/sqlite` | Mobile (iOS/Android, Capacitor) | Native SQLite on mobile | Requires Capacitor runtime |
+| `capacitor` | `@capacitor-community/sqlite` | Mobile (iOS/Android, Capacitor) | Native SQLite on mobile, encryption | Requires Capacitor runtime |
 | `memory` | built-in | Unit tests, storybooks, constrained sandboxes | Zero dependencies, instant startup | Non-durable, single-process only |
+
+### Platform Priorities
+
+| Platform | Primary Adapter | Fallback | Use Case |
+|----------|----------------|----------|----------|
+| **Web (Browser)** | IndexedDB | sql.js | PWAs, offline-first web apps |
+| **Electron (Desktop)** | better-sqlite3 | sql.js | Desktop apps, dev tools |
+| **Capacitor (Mobile)** | capacitor | IndexedDB | iOS/Android native apps |
+| **Node.js** | better-sqlite3 | Postgres, sql.js | CLI tools, local servers |
+| **Cloud (Serverless)** | Postgres | better-sqlite3 | Multi-tenant SaaS, APIs |
 
 ## Configuration & Resolution
 
 - `resolveStorageAdapter` inspects:
   - explicit options (`priority`, `type`, adapter configs),
   - environment variables (`STORAGE_ADAPTER`, `DATABASE_URL`),
-  - runtime hints (Capacitor detection, browser globals).
+  - runtime hints (Capacitor detection, browser globals, IndexedDB availability).
 - Adapters are attempted in priority order until one opens successfully; a `StorageResolutionError` includes the full failure chain.
-- Provide `priority: ['memory', 'sqljs']` for browser bundles or tests where native modules shouldn’t load.
+- Provide `priority: ['indexeddb', 'sqljs']` for browser bundles or tests where native modules shouldn't load.
 - Use `createCloudBackupManager` for S3-compatible backups with gzip compression and retention limits.
+
+### IndexedDB-Specific Config
+
+```typescript
+import { IndexedDbAdapter } from '@framers/sql-storage-adapter';
+
+const adapter = new IndexedDbAdapter({
+  dbName: 'my-app-db',       // IndexedDB database name
+  storeName: 'sqliteDb',     // Object store name
+  autoSave: true,            // Auto-save to IndexedDB after writes
+  saveIntervalMs: 5000,      // Batch writes every 5s
+});
+
+await adapter.open();
+```
+
+**Key Features:**
+- ✅ Transactions (via sql.js)
+- ✅ Persistence (IndexedDB)
+- ✅ Export/import (Uint8Array SQLite file format)
+- ✅ Auto-save with batching (reduce IDB overhead)
+
+## Platform Strategy
+
+See [**PLATFORM_STRATEGY.md**](./docs/PLATFORM_STRATEGY.md) for a comprehensive guide on:
+- Graceful degradation patterns
+- Platform-specific pros/cons
+- Performance benchmarks
+- Offline-first architectures
+- AgentOS-specific recommendations
+
+**TL;DR:** Use IndexedDB for web, better-sqlite3 for desktop, capacitor for mobile, Postgres for cloud.
 
 ## CI, Releases, and Badges
 

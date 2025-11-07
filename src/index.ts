@@ -23,3 +23,6 @@ export * from './features/sync/syncManager';
 
 // Shared utilities -----------------------------------------------------------
 export * from './shared/parameterUtils';
+
+// AgentOS-specific integration -----------------------------------------------
+export * from './agentos';

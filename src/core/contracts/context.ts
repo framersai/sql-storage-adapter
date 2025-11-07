@@ -22,7 +22,7 @@ export type DatabaseEngine = 'sqlite' | 'postgres' | 'mysql' | 'sqljs' | 'capaci
 /**
  * Adapter identifier used by the resolver.
  */
-export type AdapterKind = 'postgres' | 'better-sqlite3' | 'capacitor' | 'sqljs' | 'supabase';
+export type AdapterKind = 'postgres' | 'better-sqlite3' | 'capacitor' | 'sqljs' | 'indexeddb' | 'supabase';
 
 /**
  * Information about the current database connection.
