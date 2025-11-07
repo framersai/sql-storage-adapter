@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic fallback: IndexedDB → sql.js → memory for web
   - Improved platform detection for Electron, Capacitor, and Node.js
 - **Platform Strategy Documentation**
-  - New `docs/PLATFORM_STRATEGY.md` with comprehensive pros/cons analysis
+  - New `PLATFORM_STRATEGY.md` with comprehensive pros/cons analysis
   - Updated `docs/media/ARCHITECTURE.md` with IndexedDB adapter details
   - Client-side storage guide for AgentOS deployments
 

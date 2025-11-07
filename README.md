@@ -141,7 +141,7 @@ const cloudStorage = await createAgentOSStorage({
 });
 ```
 
-See [Platform Strategy Guide](./docs/PLATFORM_STRATEGY.md) for detailed pros/cons and architecture.
+See [Platform Strategy Guide](./PLATFORM_STRATEGY.md) for detailed pros/cons and architecture.
 
 ## Adapter Matrix
 
@@ -197,7 +197,7 @@ await adapter.open();
 
 ## Platform Strategy
 
-See [**PLATFORM_STRATEGY.md**](./docs/PLATFORM_STRATEGY.md) for a comprehensive guide on:
+See [**PLATFORM_STRATEGY.md**](./PLATFORM_STRATEGY.md) for a comprehensive guide on:
 - Graceful degradation patterns
 - Platform-specific pros/cons
 - Performance benchmarks
