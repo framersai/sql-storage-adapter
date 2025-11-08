@@ -25,7 +25,6 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 - [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [AgentOS Integration](#agentos-integration)
 - [Adapter Matrix](#adapter-matrix)
 - [Configuration & Resolution](#configuration--resolution)
 - [Platform Strategy](#platform-strategy)
@@ -40,7 +39,7 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 - **🆕 IndexedDB** – sql.js + IndexedDB persistence wrapper for browser-native, offline-first web apps (uses sql.js for SQL execution, IndexedDB for storage).
 - **Cloud backups & migrations** – built-in backup manager with compression, retention policies, and restore helpers plus migration utilities.
 - **Portable packaging** – optional native dependencies; falls back to pure TypeScript/WASM adapters when native modules are unavailable.
-- **AgentOS-first** – Pre-configured schema, typed queries, and auto-detection for AgentOS deployments.
+- **Browser-friendly** – Dynamic imports prevent bundlers from including server-only dependencies (`pg`, `path`) in browser builds.
 - **CI-first design** – Vitest coverage, Codecov integration, and GitHub Actions workflows for linting, testing, releasing, and npm publish/tag automation.
 
 ## Installation
@@ -91,50 +90,22 @@ main().catch((error) => {
 });
 ```
 
-## AgentOS Integration
-
-### Recommended: `createAgentOSStorage()`
-
-The easiest way to use sql-storage-adapter with AgentOS is the **AgentOS-first API**:
+## Platform-Specific Examples
 
 ```typescript
-import { createAgentOSStorage } from '@framers/sql-storage-adapter/agentos';
-import { AgentOS } from '@agentos/core';
+import { createDatabase, IndexedDbAdapter } from '@framers/sql-storage-adapter';
 
-// Auto-detects platform (web, electron, capacitor, node, cloud)
-const storage = await createAgentOSStorage({
-  platform: 'auto',  // Detects best adapter
-  persistence: true,
-});
-
-const agentos = new AgentOS();
-await agentos.initialize({
-  storageAdapter: storage.getAdapter(),  // 🆕 New field in AgentOSConfig
-  // ... other config
-});
-```
-
-**Features:**
-- ✅ Auto-creates AgentOS tables (conversations, sessions, personas, telemetry)
-- ✅ Platform detection (web → IndexedDB, electron → better-sqlite3, etc.)
-- ✅ Typed query builders for common operations
-- ✅ Graceful degradation (e.g., IndexedDB → sql.js fallback)
-
-### Platform-Specific Examples
-
-```typescript
 // Web (Browser): Uses IndexedDB
-const webStorage = await createAgentOSStorage({ platform: 'web' });
+const webDb = await createDatabase({ priority: ['indexeddb', 'sqljs'] });
 
 // Desktop (Electron): Uses better-sqlite3
-const desktopStorage = await createAgentOSStorage({ platform: 'electron' });
+const desktopDb = await createDatabase({ priority: ['better-sqlite3', 'sqljs'] });
 
 // Mobile (Capacitor): Uses native SQLite
-const mobileStorage = await createAgentOSStorage({ platform: 'capacitor' });
+const mobileDb = await createDatabase({ priority: ['capacitor', 'indexeddb'] });
 
 // Cloud (Node): Uses PostgreSQL
-const cloudStorage = await createAgentOSStorage({ 
-  platform: 'cloud',
+const cloudDb = await createDatabase({ 
   postgres: { connectionString: process.env.DATABASE_URL }
 });
 ```
@@ -189,11 +160,44 @@ await adapter.open();
 
 **Key Features:**
 - ✅ SQL execution via sql.js (WASM SQLite)
-- ✅ Persistence via IndexedDB (stores SQLite database file as blob)
+- ✅ **Automatic persistence** via IndexedDB (stores SQLite database file as blob)
 - ✅ JSON support (SQLite JSON1 extension: json_extract, json_object, json_array, etc.)
 - ✅ Prepared statements for performance and security
 - ✅ Export/import (Uint8Array SQLite file format)
 - ✅ Auto-save with batching (reduce IDB overhead)
+
+**Why IndexedDB Adapter vs sql.js Adapter?**
+
+| Feature | IndexedDB Adapter | sql.js Adapter |
+|---------|------------------|----------------|
+| **SQL Engine** | sql.js (WASM) | sql.js (WASM) |
+| **Persistence** | ✅ **Automatic** (saves to IndexedDB after writes) | ⚠️ **Manual** (you must call `db.export()` and save yourself) |
+| **Data survives refresh** | ✅ Yes | ❌ No (unless you manually saved) |
+| **Use Case** | Production PWAs, offline-first apps | Edge functions, temporary data, prototyping |
+
+**Is IndexedDB Adapter Necessary?**
+
+**✅ YES, if you need:**
+- Data to survive page refreshes (production apps)
+- Offline-first functionality (PWAs)
+- Privacy-first apps (data never leaves browser)
+- Zero manual save logic (just works)
+
+**❌ NO, if you:**
+- Only need temporary/in-memory data (edge functions, Cloudflare Workers)
+- Are prototyping and don't care about persistence
+- Want to manually control when data is saved
+- Don't need data to survive refreshes
+
+**The Value:** IndexedDB adapter provides **automatic persistence** that sql.js doesn't have. With sql.js alone, your data is lost on page refresh unless you manually export and save it. IndexedDB adapter does this automatically, making it production-ready for persistent client-side storage.
+
+**Alternative:** You could use sql.js directly and manually save to IndexedDB yourself, but you'd lose:
+- Automatic batched saves (performance)
+- Reliable persistence (easy to forget manual saves)
+- Consistent API across platforms
+- Production-ready defaults
+
+**Bottom line:** IndexedDB adapter is **necessary for production web apps** that need persistence. For prototypes or edge functions, sql.js alone is fine.
 
 **Note:** IndexedDB adapter is a wrapper around sql.js that adds IndexedDB persistence. It's not a separate SQL engine—it uses sql.js for all SQL operations and IndexedDB only for storing the database file. Since sql.js is full SQLite WASM, it supports all SQLite features including JSON functions, BLOBs, and full-text search.
 
@@ -204,7 +208,7 @@ See [**PLATFORM_STRATEGY.md**](./PLATFORM_STRATEGY.md) for a comprehensive guide
 - Platform-specific pros/cons
 - Performance benchmarks
 - Offline-first architectures
-- AgentOS-specific recommendations
+- Browser-friendly bundling (dynamic imports prevent server-only dependencies from being bundled)
 
 **TL;DR:** Use IndexedDB for web, better-sqlite3 for desktop, capacitor for mobile, Postgres for cloud.
 

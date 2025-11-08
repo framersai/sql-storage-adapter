@@ -1,4 +1,44 @@
-import path from 'path';
+// Browser-safe path utilities - avoid importing Node.js 'path' module in browser builds
+const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
+const isNode = typeof process !== 'undefined' && !!process.versions?.node;
+
+// Browser-safe path join (only used in Node.js environments)
+const joinPath = async (parts: string[]): Promise<string> => {
+  if (isBrowser) {
+    // In browser, just join with '/' (not used anyway since filePath is provided)
+    return parts.join('/');
+  }
+  // In Node.js, use path.join dynamically
+  if (isNode) {
+    try {
+      // Dynamic import to avoid bundling 'path' in browser builds
+      const path = await import('path');
+      return path.join(...parts);
+    } catch {
+      // Fallback if import fails
+      return parts.join('/');
+    }
+  }
+  return parts.join('/');
+};
+
+// Browser-safe process.env access
+const getEnv = (key: string): string | undefined => {
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env[key];
+  }
+  return undefined;
+};
+
+// Browser-safe process.cwd()
+const getCwd = (): string => {
+  if (isNode && typeof process !== 'undefined' && process.cwd) {
+    return process.cwd();
+  }
+  // Browser fallback (not used in browser anyway)
+  return '/';
+};
+
 import type { StorageAdapter, StorageAdapterFactory, StorageOpenOptions } from './contracts';
 import { StorageResolutionError } from './contracts';
 import type { AdapterKind } from './contracts/context';
@@ -49,9 +89,10 @@ interface Candidate {
  * Tries candidates in the supplied priority order and falls back when one fails.
  */
 export const resolveStorageAdapter = async (options: StorageResolutionOptions = {}): Promise<StorageAdapter> => {
-  const envOverride = process.env.STORAGE_ADAPTER as AdapterKind | undefined;
-  const postgresConnection = options.postgres?.connectionString ?? process.env.DATABASE_URL ?? undefined;
-  const filePath = options.filePath ?? path.join(process.cwd(), 'db_data', 'app.sqlite3');
+  const envOverride = getEnv('STORAGE_ADAPTER') as AdapterKind | undefined;
+  const postgresConnection = options.postgres?.connectionString ?? getEnv('DATABASE_URL') ?? undefined;
+  const defaultFilePath = isBrowser ? 'db_data/app.sqlite3' : await joinPath([getCwd(), 'db_data', 'app.sqlite3']);
+  const filePath = options.filePath ?? defaultFilePath;
 
   const defaultPriority: AdapterKind[] = (() => {
     if (options.priority && options.priority.length > 0) {
@@ -104,7 +145,7 @@ export const resolveStorageAdapter = async (options: StorageResolutionOptions = 
           factory: async () => {
             const adapterOptions = options.openOptions?.adapterOptions as { dbName?: string } | undefined;
             return new IndexedDbAdapter({
-              dbName: adapterOptions?.dbName || 'agentos-db',
+              dbName: adapterOptions?.dbName || 'app-db',
               autoSave: true,
             });
           }

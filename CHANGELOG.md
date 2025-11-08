@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2025-01-08
+
+### Changed
+- **Browser-friendly by default**: Made `sql-storage-adapter` more browser-friendly to prevent bundling issues
+  - **PostgreSQL adapter**: Changed from top-level `import { Pool } from 'pg'` to dynamic `await import('pg')` to prevent bundlers from trying to bundle `pg` in browser builds
+  - **Resolver**: Replaced `import path from 'path'` with browser-safe dynamic import and conditional usage
+  - **Process access**: Added browser-safe wrappers for `process.env` and `process.cwd()` that gracefully handle browser environments
+  - These changes prevent Vite and other bundlers from trying to bundle Node.js-only modules (`pg`, `path`) in browser builds
+
+### Fixed
+- **Browser compatibility**: Fixed issues where bundlers would try to analyze and bundle server-only dependencies (`pg`, `path`) when `sql-storage-adapter` was imported in browser code
+- **No breaking changes**: All changes are backward compatible - server-side behavior is unchanged
+
+### Technical Details
+- `postgresAdapter.ts`: Now uses lazy dynamic import of `pg` module (similar to `betterSqliteAdapter.ts`)
+- `resolver.ts`: Uses browser-safe path utilities and process access that don't require Node.js modules at module load time
+- Browser detection: Added runtime checks to avoid Node.js module imports in browser environments
+
 ## [0.3.2] - 2025-11-07
 
 ### Changed

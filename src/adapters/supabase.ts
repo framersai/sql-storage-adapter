@@ -63,7 +63,15 @@ export class SupabaseAdapter implements StorageAdapter, StorageAdapterExtensions
     const pg = await import('pg');
     const { Pool } = pg;
 
-    const connectionString = options?.connectionString || process.env.DATABASE_URL;
+    // Browser-safe process.env access
+    const getEnv = (key: string): string | undefined => {
+      if (typeof process !== 'undefined' && process.env) {
+        return process.env[key];
+      }
+      return undefined;
+    };
+
+    const connectionString = options?.connectionString || getEnv('DATABASE_URL');
     if (!connectionString) {
       throw new Error('Supabase connection string required (DATABASE_URL or connectionString option)');
     }

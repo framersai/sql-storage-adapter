@@ -3,7 +3,12 @@
 // execution actually occurs in a browser.
 const __isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
 
-import { Pool, PoolClient, PoolConfig } from 'pg';
+// Dynamic import for pg to prevent bundlers from trying to bundle it in browser builds
+type PgModule = typeof import('pg');
+type Pool = import('pg').Pool;
+type PoolClient = import('pg').PoolClient;
+type PoolConfig = import('pg').PoolConfig;
+
 import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../core/contracts';
 import { normaliseParameters } from '../shared/parameterUtils';
 
@@ -208,6 +213,7 @@ export class PostgresAdapter implements StorageAdapter {
   private options: PostgresAdapterOptions;
   private pool: Pool | null = null;
   private transactionalClient: PoolClient | null = null;
+  private pgModule: PgModule | null = null;
 
   constructor(options: PostgresAdapterOptions | string) {
     // Support both string and object initialization
@@ -215,6 +221,27 @@ export class PostgresAdapter implements StorageAdapter {
       this.options = { connectionString: options };
     } else {
       this.options = options;
+    }
+  }
+
+  /**
+   * Lazy loader for pg module to keep the dependency optional and prevent bundling in browser builds.
+   */
+  private async loadPgModule(): Promise<PgModule> {
+    if (this.pgModule) {
+      return this.pgModule;
+    }
+
+    if (__isBrowser) {
+      throw new Error('[StorageAdapter] PostgreSQL adapter cannot be used in a browser environment.');
+    }
+
+    try {
+      // Dynamic import prevents bundlers from including pg in browser builds
+      this.pgModule = await import('pg') as unknown as PgModule;
+      return this.pgModule;
+    } catch (error) {
+      throw new Error(`[StorageAdapter] Failed to load pg module. Install it with: npm install pg. Error: ${error}`);
     }
   }
 
@@ -226,6 +253,10 @@ export class PostgresAdapter implements StorageAdapter {
     if (__isBrowser) {
       throw new Error('[StorageAdapter] PostgreSQL adapter cannot be opened in a browser environment.');
     }
+
+    // Load pg module dynamically
+    const pg = await this.loadPgModule();
+    const { Pool } = pg;
 
     // Build pool configuration
     const poolConfig: PoolConfig = {};

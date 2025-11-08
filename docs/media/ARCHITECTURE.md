@@ -160,8 +160,8 @@ const db = await resolveStorageAdapter({
 ```typescript
 const db = await resolveStorageAdapter({
   priority: ['indexeddb'],
-  // Or use AgentOS-first API:
-  // const storage = await createAgentOSStorage({ platform: 'web' });
+  // Or specify platform explicitly:
+  // const storage = await createDatabase({ priority: ['indexeddb', 'sqljs'] });
 });
 ```
 
@@ -250,13 +250,20 @@ const backup = adapter.exportDatabase();  // Uint8Array (SQLite file)
 | Feature | IndexedDB Adapter | SQL.js Adapter |
 |---------|------------------|----------------|
 | **SQL Engine** | sql.js (WASM) | sql.js (WASM) |
-| **Persistence** | ✅ Automatic (IndexedDB) | ⚠️ Manual (`save()` required) |
-| **Auto-save** | ✅ Yes (batched) | ❌ No |
+| **Persistence** | ✅ **Automatic** (IndexedDB) | ⚠️ **Manual** (`export()` + save yourself) |
+| **Auto-save** | ✅ Yes (batched every 5s) | ❌ No |
+| **Data survives refresh** | ✅ Yes | ❌ No (unless manually saved) |
 | **Bundle Size** | Same (~500KB) | Same (~500KB) |
 | **Performance** | Same (both use sql.js) | Same |
-| **Use Case** | Production web apps | Prototyping, edge functions |
+| **Use Case** | **Production web apps** | Prototyping, edge functions, temporary data |
 
-**Key Difference**: IndexedDB adapter is sql.js + automatic IndexedDB persistence wrapper. SQL.js adapter is sql.js with optional manual persistence. Both use the same SQL engine (sql.js).
+**Key Difference**: 
+- **sql.js adapter**: In-memory database. You must manually call `db.export()` and save it to localStorage/server/etc. Data is lost on refresh.
+- **IndexedDB adapter**: Same sql.js engine, but **automatically saves to IndexedDB** after writes. Data survives page refreshes. This is the production-ready option for persistent client-side storage.
+
+**When to use each:**
+- **IndexedDB adapter**: Production PWAs, offline-first apps, any app where data must survive refreshes
+- **sql.js adapter**: Edge functions (Cloudflare Workers), temporary calculations, prototyping, when you don't need persistence
 
 **Configuration**:
 ```typescript

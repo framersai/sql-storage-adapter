@@ -1,5 +1,5 @@
 /**
- * @fileoverview IndexedDB Storage Adapter for AgentOS
+ * @fileoverview IndexedDB Storage Adapter
  * @description Browser-native SQL storage using sql.js (WASM) for SQL execution and IndexedDB for persistence.
  * 
  * **Architecture:**
@@ -14,9 +14,9 @@
  * - Together: Full SQL capabilities + browser persistence = best of both worlds
  * 
  * **Use cases:**
- * - Fully client-side AgentOS (no backend needed)
+ * - Fully client-side applications (no backend needed)
  * - Progressive Web Apps (PWAs)
- * - Offline-capable agents
+ * - Offline-capable web apps
  * - Privacy-first applications (data never leaves browser)
  * 
  * **Performance:**
@@ -29,7 +29,7 @@
  * import { IndexedDbAdapter } from '@framers/sql-storage-adapter/adapters/indexedDbAdapter';
  * 
  * const adapter = new IndexedDbAdapter({
- *   dbName: 'agentos-client-db',
+ *   dbName: 'my-app-db',
  *   autoSave: true,
  *   saveIntervalMs: 5000,
  * });
@@ -58,7 +58,7 @@ import { normaliseParameters } from '../shared/parameterUtils';
  * Configuration for IndexedDB adapter.
  */
 export interface IndexedDbAdapterOptions {
-  /** IndexedDB database name (default: 'agentos-db') */
+  /** IndexedDB database name (default: 'app-db') */
   dbName?: string;
   /** IndexedDB object store name (default: 'sqliteDb') */
   storeName?: string;
@@ -76,19 +76,55 @@ const DB_VERSION = 1;
 /**
  * Storage adapter using IndexedDB + sql.js for client-side SQL persistence.
  * 
+ * **The Key Difference: Automatic Persistence**
+ * 
+ * **sql.js adapter alone:**
+ * - In-memory SQLite database (lost on page refresh)
+ * - You must manually call `db.export()` and save it yourself
+ * - No automatic persistence in browsers
+ * - Good for: Edge functions, temporary calculations, prototyping
+ * 
+ * **IndexedDB adapter (this):**
+ * - Same sql.js SQL engine, but automatically saves to IndexedDB
+ * - Data survives page refreshes automatically
+ * - Auto-save batching reduces overhead
+ * - Good for: Production PWAs, offline-first apps, persistent client-side storage
+ * 
+ * **Is This Necessary?**
+ * 
+ * **✅ YES** if you need:
+ * - Data to survive page refreshes (production apps)
+ * - Offline-first functionality (PWAs)
+ * - Privacy-first apps (data never leaves browser)
+ * - Zero manual save logic (just works)
+ * 
+ * **❌ NO** if you:
+ * - Only need temporary/in-memory data (edge functions)
+ * - Are prototyping and don't care about persistence
+ * - Want to manually control when data is saved
+ * - Don't need data to survive refreshes
+ * 
+ * **Alternative:** You could use sql.js directly and manually save to IndexedDB yourself, but you'd lose:
+ * - Automatic batched saves (performance optimization)
+ * - Reliable persistence (easy to forget manual saves = data loss)
+ * - Consistent API across platforms
+ * - Production-ready defaults
+ * 
+ * **Bottom line:** This adapter is **necessary for production web apps** that need persistence. For prototypes or edge functions, sql.js alone is fine.
+ * 
  * **How It Works:**
  * 1. IndexedDB stores the SQLite database file (binary blob) - this is just storage
  * 2. sql.js (WASM) loads the database into memory and executes SQL - this provides SQL capabilities
- * 3. After writes, the updated database is saved back to IndexedDB
+ * 3. After writes, the updated database is automatically saved back to IndexedDB
  * 
  * **Why IndexedDB + sql.js?**
  * - IndexedDB alone: NoSQL key-value store, no SQL support
- * - sql.js alone: In-memory SQL, but no persistence across sessions
- * - Combined: Full SQL + browser-native persistence = complete solution
+ * - sql.js alone: In-memory SQL, but **no automatic persistence** (you must manually save)
+ * - Combined: Full SQL + **automatic browser-native persistence** = production-ready solution
  * 
  * **Capabilities:**
  * - ✅ Transactions (via sql.js)
- * - ✅ Persistence (via IndexedDB)
+ * - ✅ Persistence (via IndexedDB - automatic!)
  * - ✅ Full SQL support (via sql.js)
  * - ✅ Export/import
  * - ❌ Concurrent writes (single-threaded)
@@ -99,14 +135,11 @@ const DB_VERSION = 1;
  * - Moderate writes (IndexedDB persistence)
  * - Auto-save batching reduces IDB overhead
  * 
- * @example Client-side AgentOS
+ * @example Client-side application
  * ```typescript
  * const adapter = new IndexedDbAdapter({ dbName: 'my-app-db' });
- * const agentos = new AgentOS();
- * await agentos.initialize({
- *   storageAdapter: adapter,
- *   // ... other config
- * });
+ * await adapter.open();
+ * await adapter.run('CREATE TABLE sessions (id TEXT PRIMARY KEY, data TEXT)');
  * ```
  */
 export class IndexedDbAdapter implements StorageAdapter {
@@ -127,7 +160,7 @@ export class IndexedDbAdapter implements StorageAdapter {
   private readonly sqlJsConfig: any;
 
   constructor(options: IndexedDbAdapterOptions = {}) {
-    this.dbName = options.dbName || 'agentos-db';
+    this.dbName = options.dbName || 'app-db';
     this.storeName = options.storeName || 'sqliteDb';
     this.autoSave = options.autoSave ?? true;
     this.saveIntervalMs = options.saveIntervalMs || 5000;
