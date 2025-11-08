@@ -5,10 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-11-07
+
+### Changed
+- **Documentation clarifications**: Updated all docs to clarify that IndexedDB adapter is sql.js + IndexedDB persistence wrapper (not a separate SQL engine)
+- **Capability updates**: Added `json` and `prepared` capabilities to IndexedDB and sql.js adapters
+  - Both adapters now correctly declare JSON support (via SQLite JSON1 extension)
+  - Prepared statements capability added for both adapters
+- **README updates**: Clarified IndexedDB adapter relationship with sql.js throughout documentation
+
+### Documentation
+- Updated README.md adapter matrix to clarify IndexedDB is sql.js wrapper
+- Updated PLATFORM_STRATEGY.md with detailed explanation of IndexedDB + sql.js architecture
+- Updated ARCHITECTURE.md to note IndexedDB adapter is not a separate SQL engine
+- Added notes about JSON support via SQLite JSON1 extension for IndexedDB/sql.js adapters
+
 ## [0.3.0] - 2025-11-06
 
 ### Added
-- **IndexedDB Adapter** (`IndexedDbAdapter`) - Browser-native SQL storage using IndexedDB with sql.js for full client-side operation
+- **IndexedDB Adapter** (`IndexedDbAdapter`) - sql.js + IndexedDB persistence wrapper for browser-native SQL storage
+  - **Note**: This adapter uses sql.js (WASM SQLite) for all SQL execution and IndexedDB only for storing the database file as a binary blob
   - Automatic persistence to IndexedDB with configurable auto-save intervals
   - Full SQL support via sql.js (SQLite compiled to WebAssembly)
   - Export/import functionality for data portability

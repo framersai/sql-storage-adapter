@@ -37,7 +37,7 @@ export class SqlJsAdapter implements StorageAdapter {
   private filePath?: string;
 
   constructor(private readonly adapterOptions: SqlJsAdapterOptions = {}) {
-    const caps: StorageCapability[] = ['transactions'];
+    const caps: StorageCapability[] = ['transactions', 'json', 'prepared'];
     if (hasFsAccess()) {
       caps.push('persistence');
     }

@@ -20,14 +20,16 @@ const storage = await createAgentOSStorage({
 
 | Adapter | Pros | Cons | Best For |
 |---------|------|------|----------|
-| **IndexedDB** (NEW) | ✅ Native browser API<br>✅ Async, non-blocking<br>✅ 50MB-1GB+ quota<br>✅ Structured transactions<br>✅ No WASM overhead | ❌ Complex API (wrapped by sql.js)<br>❌ IndexedDB quotas vary by browser<br>❌ No SQL queries (need sql.js layer) | **Primary choice** for web<br>Offline PWAs<br>Privacy-first apps |
+| **IndexedDB** (NEW) | ✅ Native browser storage API<br>✅ Async, non-blocking<br>✅ 50MB-1GB+ quota<br>✅ sql.js wrapper (full SQL support)<br>✅ Persistent across sessions | ❌ Uses sql.js WASM (500KB load)<br>❌ IndexedDB quotas vary by browser<br>❌ Not a separate SQL engine (sql.js + IDB persistence) | **Primary choice** for web<br>Offline PWAs<br>Privacy-first apps |
 | **sql.js** | ✅ Full SQLite in WASM<br>✅ In-memory fast reads<br>✅ Optional IDB persistence<br>✅ Zero dependencies | ❌ 500KB WASM load<br>❌ Slow writes to IDB<br>❌ Single-threaded | Fallback for web<br>Edge functions |
 | **LocalStorage** | ✅ 5-10MB simple API | ❌ Synchronous (blocks UI)<br>❌ String-only<br>❌ No transactions | ❌ **NOT RECOMMENDED** |
 
-**Winner:** **IndexedDB + sql.js** (our new IndexedDbAdapter)
-- Best of both: native IDB durability + SQL convenience
+**Winner:** **IndexedDB adapter** (sql.js + IndexedDB persistence wrapper)
+- sql.js provides SQL execution (WASM SQLite)
+- IndexedDB provides browser-native persistence (stores SQLite file as blob)
 - Auto-save batching minimizes IDB overhead
 - Works offline, respects privacy
+- **Note:** This is sql.js with IndexedDB persistence, not a separate SQL engine
 
 ---
 

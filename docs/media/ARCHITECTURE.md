@@ -115,7 +115,9 @@ const db = await resolveStorageAdapter({
 
 ### IndexedDB Adapter (Browser-Native)
 
-**Implementation**: sql.js (SQLite WASM) + IndexedDB for persistence
+**Implementation**: sql.js (SQLite WASM) + IndexedDB persistence wrapper
+
+**Important**: This adapter is **not a separate SQL engine**. It uses sql.js for all SQL execution and IndexedDB only for storing the SQLite database file as a binary blob. Think of it as "sql.js with automatic IndexedDB persistence."
 
 **When to use**:
 - **Browser applications** (primary use case)
@@ -247,13 +249,14 @@ const backup = adapter.exportDatabase();  // Uint8Array (SQLite file)
 
 | Feature | IndexedDB Adapter | SQL.js Adapter |
 |---------|------------------|----------------|
-| **Persistence** | ✅ Automatic | ⚠️ Manual (`save()` required) |
+| **SQL Engine** | sql.js (WASM) | sql.js (WASM) |
+| **Persistence** | ✅ Automatic (IndexedDB) | ⚠️ Manual (`save()` required) |
 | **Auto-save** | ✅ Yes (batched) | ❌ No |
 | **Bundle Size** | Same (~500KB) | Same (~500KB) |
 | **Performance** | Same (both use sql.js) | Same |
 | **Use Case** | Production web apps | Prototyping, edge functions |
 
-**Recommendation**: Use **IndexedDB Adapter** for production web apps (automatic persistence). Use **SQL.js Adapter** only if you need manual control over save timing.
+**Key Difference**: IndexedDB adapter is sql.js + automatic IndexedDB persistence wrapper. SQL.js adapter is sql.js with optional manual persistence. Both use the same SQL engine (sql.js).
 
 **Configuration**:
 ```typescript

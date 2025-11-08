@@ -1,7 +1,17 @@
 /**
  * @fileoverview IndexedDB Storage Adapter for AgentOS
- * @description Browser-native SQL storage using IndexedDB with sql.js for full client-side operation.
- * Supports transactions, persistence to IndexedDB, and offline-first workflows.
+ * @description Browser-native SQL storage using sql.js (WASM) for SQL execution and IndexedDB for persistence.
+ * 
+ * **Architecture:**
+ * - **SQL Execution**: Uses sql.js (SQLite compiled to WebAssembly) for full SQL support
+ * - **Persistence**: Stores the SQLite database file (as binary blob) in IndexedDB
+ * - **Workflow**: Load DB from IndexedDB → Execute SQL in memory (sql.js) → Save back to IndexedDB
+ * 
+ * **Why this approach?**
+ * - IndexedDB is NOT SQL - it's a NoSQL key-value store
+ * - sql.js provides full SQLite compatibility (transactions, joins, etc.)
+ * - IndexedDB provides durable browser-native persistence
+ * - Together: Full SQL capabilities + browser persistence = best of both worlds
  * 
  * **Use cases:**
  * - Fully client-side AgentOS (no backend needed)
@@ -9,11 +19,10 @@
  * - Offline-capable agents
  * - Privacy-first applications (data never leaves browser)
  * 
- * **Architecture:**
- * - Uses sql.js (SQLite compiled to WebAssembly) for SQL execution
- * - Persists database to IndexedDB for durability across sessions
- * - Auto-saves after each transaction
- * - Supports import/export for data portability
+ * **Performance:**
+ * - Fast reads (in-memory SQL via sql.js)
+ * - Moderate writes (IndexedDB persistence adds ~10-50ms)
+ * - Auto-save batching reduces IDB overhead
  * 
  * @example
  * ```typescript
@@ -67,9 +76,19 @@ const DB_VERSION = 1;
 /**
  * Storage adapter using IndexedDB + sql.js for client-side SQL persistence.
  * 
+ * **How It Works:**
+ * 1. IndexedDB stores the SQLite database file (binary blob) - this is just storage
+ * 2. sql.js (WASM) loads the database into memory and executes SQL - this provides SQL capabilities
+ * 3. After writes, the updated database is saved back to IndexedDB
+ * 
+ * **Why IndexedDB + sql.js?**
+ * - IndexedDB alone: NoSQL key-value store, no SQL support
+ * - sql.js alone: In-memory SQL, but no persistence across sessions
+ * - Combined: Full SQL + browser-native persistence = complete solution
+ * 
  * **Capabilities:**
- * - ✅ Transactions
- * - ✅ Persistence (IndexedDB)
+ * - ✅ Transactions (via sql.js)
+ * - ✅ Persistence (via IndexedDB)
  * - ✅ Full SQL support (via sql.js)
  * - ✅ Export/import
  * - ❌ Concurrent writes (single-threaded)
@@ -92,7 +111,7 @@ const DB_VERSION = 1;
  */
 export class IndexedDbAdapter implements StorageAdapter {
   public readonly kind = 'indexeddb';
-  public readonly capabilities: ReadonlySet<StorageCapability> = new Set(['transactions', 'persistence']);
+  public readonly capabilities: ReadonlySet<StorageCapability> = new Set(['transactions', 'persistence', 'json', 'prepared']);
 
   private SQL: SqlJsStatic | null = null;
   private db: SqlJsDatabase | null = null;

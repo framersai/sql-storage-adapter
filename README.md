@@ -37,7 +37,7 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 
 - **Auto-detected adapters** – `createDatabase()` inspects environment signals and picks the best backend (native SQLite, PostgreSQL, Capacitor, sql.js, **IndexedDB**, memory, etc.).
 - **Capability-aware API** – consistent CRUD, transactions, batching, and event hooks across adapters with runtime capability introspection.
-- **🆕 IndexedDB** – Browser-native persistence with sql.js for full SQL support in PWAs and offline-first apps.
+- **🆕 IndexedDB** – sql.js + IndexedDB persistence wrapper for browser-native, offline-first web apps (uses sql.js for SQL execution, IndexedDB for storage).
 - **Cloud backups & migrations** – built-in backup manager with compression, retention policies, and restore helpers plus migration utilities.
 - **Portable packaging** – optional native dependencies; falls back to pure TypeScript/WASM adapters when native modules are unavailable.
 - **AgentOS-first** – Pre-configured schema, typed queries, and auto-detection for AgentOS deployments.
@@ -145,10 +145,10 @@ See [Platform Strategy Guide](./PLATFORM_STRATEGY.md) for detailed pros/cons and
 
 | Adapter | Package | Ideal for | Pros | Considerations |
 | --- | --- | --- | --- | --- |
-| **🆕 `indexeddb`** | bundled | **Browsers, PWAs** | Browser-native, async, 50MB-1GB+ quota, SQL via sql.js, offline-first | IndexedDB quotas vary, WASM overhead for SQL |
+| **🆕 `indexeddb`** | bundled (sql.js) | **Browsers, PWAs** | sql.js + IndexedDB persistence wrapper, browser-native storage, 50MB-1GB+ quota, offline-first | IndexedDB quotas vary, WASM overhead (sql.js), not a separate SQL engine |
 | `better-sqlite3` | `better-sqlite3` | Node/Electron, CLI, CI | Native performance, transactional semantics, WAL support | Needs native toolchain; version must match Node ABI |
 | `postgres` | `pg` | Hosted or on-prem PostgreSQL | Connection pooling, rich SQL features, cloud friendly | Requires `DATABASE_URL`/credentials |
-| `sqljs` | bundled | Browsers, serverless edge, native fallback | Pure WASM, no native deps | Write performance limited vs native, optional persistence |
+| `sqljs` | bundled | Browsers, serverless edge, native fallback | Pure WASM SQLite, no native deps, optional filesystem persistence | Write performance limited vs native, in-memory by default |
 | `capacitor` | `@capacitor-community/sqlite` | Mobile (iOS/Android, Capacitor) | Native SQLite on mobile, encryption | Requires Capacitor runtime |
 | `memory` | built-in | Unit tests, storybooks, constrained sandboxes | Zero dependencies, instant startup | Non-durable, single-process only |
 
@@ -188,10 +188,14 @@ await adapter.open();
 ```
 
 **Key Features:**
-- ✅ Transactions (via sql.js)
-- ✅ Persistence (IndexedDB)
+- ✅ SQL execution via sql.js (WASM SQLite)
+- ✅ Persistence via IndexedDB (stores SQLite database file as blob)
+- ✅ JSON support (SQLite JSON1 extension: json_extract, json_object, json_array, etc.)
+- ✅ Prepared statements for performance and security
 - ✅ Export/import (Uint8Array SQLite file format)
 - ✅ Auto-save with batching (reduce IDB overhead)
+
+**Note:** IndexedDB adapter is a wrapper around sql.js that adds IndexedDB persistence. It's not a separate SQL engine—it uses sql.js for all SQL operations and IndexedDB only for storing the database file. Since sql.js is full SQLite WASM, it supports all SQLite features including JSON functions, BLOBs, and full-text search.
 
 ## Platform Strategy
 
