@@ -4,10 +4,9 @@
 
 <p align="center">
   <a href="https://frame.dev" target="_blank" rel="noopener">
-    <img src="https://raw.githubusercontent.com/framersai/frame.dev/refs/heads/master/public/frame-logo-transparent.png" alt="Frame.dev" width="120" style="border-radius: 12px;">
+    <img src="https://raw.githubusercontent.com/framersai/frame.dev/refs/heads/master/public/frame-logo-transparent.png" alt="Frame.dev" style="border-radius: 12px;">
   </a>
   <br>
-  <small>by <a href="https://frame.dev" target="_blank" rel="noopener">Frame.dev</a></small>
 </p>
 
 [![npm version](https://img.shields.io/npm/v/@framers/sql-storage-adapter.svg?logo=npm&label=npm)](https://www.npmjs.com/package/@framers/sql-storage-adapter)
