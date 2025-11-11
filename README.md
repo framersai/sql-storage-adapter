@@ -1,16 +1,10 @@
 <!-- BRANDING-LOGOS -->
-<p align="center">
-  <a href="https://agentos.sh"><img src="logos/agentos-primary-no-tagline.svg" alt="AgentOS" height="64" /></a>
-</p>
-<p align="center">
-  <a href="https://frame.dev"><img src="logos/frame-wordmark.svg" alt="Frame" height="28" /></a>
-</p>
 
 # SQL Storage Adapter
 
 <p align="center">
   <a href="https://frame.dev" target="_blank" rel="noopener">
-    <img src="https://avatars.githubusercontent.com/u/184314983?s=400&u=02bc60d3f02d586a9ed526e394162651192670c1&v=4" alt="Frame.dev" width="120" style="border-radius: 12px;">
+    <img src="https://raw.githubusercontent.com/framersai/frame.dev/refs/heads/master/public/frame-logo-transparent.png" alt="Frame.dev" width="120" style="border-radius: 12px;">
   </a>
   <br>
   <small>by <a href="https://frame.dev" target="_blank" rel="noopener">Frame.dev</a></small>
