@@ -1,3 +1,8 @@
+## [0.3.4] - 2025-11-11
+
+### Fixed
+- Normalized all ESM export/import specifiers in the published bundle so Node.js can resolve the adapter without additional build-time patches.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
