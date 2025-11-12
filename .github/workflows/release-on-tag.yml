@@ -59,25 +59,27 @@ jobs:
         shell: bash
         if: always()
         run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
           if [ -f CHANGELOG.md ]; then
-            export VERSION="${{ steps.pkg.outputs.version }}"
-            node <<'NODE' >> "$GITHUB_OUTPUT"
-            const fs = require('fs');
-            const version = process.env.VERSION || process.env.npm_package_version;
-            const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
-            const escaped = version.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-            const regex = new RegExp(\`## \\\[${version}\\\][\\\\s\\\\S]*?(?=\\n## \\\[|$)\`, 'm');
-            const match = changelog.match(regex);
-            const notes = match ? match[0].trim() : \`## [\${version}]\n\nRelease notes not found.\`;
-            console.log("notes<<EOF");
-            console.log(notes);
-            console.log("EOF");
-            NODE
+            notes=$(awk -v ver="$VERSION" '
+              BEGIN{p=0}
+              $0 ~ "^## \\["ver"\\]" {p=1; print; next}
+              p && /^## \\[/{exit}
+              p {print}
+            ' CHANGELOG.md)
+            if [ -z "$notes" ]; then
+              notes="## [$VERSION]
+
+Release notes not found."
+            fi
           else
-            echo "notes<<EOF" >> $GITHUB_OUTPUT
-            echo "Release notes not found in CHANGELOG.md." >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            notes="Release notes not found in CHANGELOG.md."
           fi
+          {
+            echo "notes<<EOF"
+            echo "$notes"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Create/Update GitHub Release
         if: always()
         uses: ncipollo/release-action@v1

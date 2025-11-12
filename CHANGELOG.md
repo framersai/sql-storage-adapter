@@ -1,3 +1,8 @@
+## [0.3.6] - 2025-11-12
+
+### Fixed
+- Release workflow: replace Node heredoc with robust bash/awk; always set notes output. Ensures GitHub Release is created even if npm publish step is skipped or fails.
+
 ## [0.3.5] - 2025-11-12
 
 ### Changed
