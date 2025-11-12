@@ -1,3 +1,8 @@
+## [0.3.5] - 2025-11-12
+
+### Changed
+- Release automation: fixed GitHub Actions release-on-tag workflow (pnpm install, bash env handling, README/Typedoc sync). No runtime code changes.
+
 ## [0.3.4] - 2025-11-11
 
 ### Fixed
