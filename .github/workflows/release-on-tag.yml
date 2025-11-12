@@ -48,12 +48,16 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Read package version
         id: pkg
-        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Generate release notes from CHANGELOG.md
         id: notes
+        shell: bash
         run: |
           if [ -f CHANGELOG.md ]; then
-            VERSION="${{ steps.pkg.outputs.version }}"
+            export VERSION="${{ steps.pkg.outputs.version }}"
             node <<'NODE' >> "$GITHUB_OUTPUT"
             const fs = require('fs');
             const version = process.env.VERSION || process.env.npm_package_version;
