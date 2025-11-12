@@ -30,7 +30,7 @@ jobs:
           fi
       - name: Generate typedoc
         run: |
-          npm run docs || npx typedoc
+          npx typedoc --options typedoc.json
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
