@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -14,10 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
       - name: Install
         run: |
           if [ -f pnpm-lock.yaml ]; then
@@ -31,7 +34,7 @@ jobs:
         run: npm run build --if-present
       - name: Test
         run: npm test --if-present
-      - name: Publish
+      - name: Publish to npm
         run: |
           pkg_private=$(node -e "try{console.log(require('./package.json').private===true?'true':'false')}catch(e){console.log('false')}")
           if [ "$pkg_private" = "true" ]; then
@@ -41,48 +44,36 @@ jobs:
           npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-name: Publish on tag
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: read
-  id-token: write
-
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-          cache: 'npm'
-      - name: Install
+      - name: Read package version
+        id: pkg
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+      - name: Generate release notes from CHANGELOG.md
+        id: notes
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
+          if [ -f CHANGELOG.md ]; then
+            VERSION="${{ steps.pkg.outputs.version }}"
+            node <<'NODE' >> "$GITHUB_OUTPUT"
+            const fs = require('fs');
+            const version = process.env.VERSION || process.env.npm_package_version;
+            const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+            const escaped = version.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+            const regex = new RegExp(\`## \\\[${version}\\\][\\\\s\\\\S]*?(?=\\n## \\\[|$)\`, 'm');
+            const match = changelog.match(regex);
+            const notes = match ? match[0].trim() : \`## [\${version}]\n\nRelease notes not found.\`;
+            console.log("notes<<EOF");
+            console.log(notes);
+            console.log("EOF");
+            NODE
           else
-            npm install
+            echo "notes<<EOF" >> $GITHUB_OUTPUT
+            echo "Release notes not found in CHANGELOG.md." >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           fi
-      - name: Build
-        run: npm run build --if-present
-      - name: Test
-        run: npm test --if-present
-      - name: Publish
-        run: |
-          pkg_private=$(node -e "try{console.log(require('./package.json').private===true?'true':'false')}catch(e){console.log('false')}")
-          if [ "$pkg_private" = "true" ]; then
-            echo "package.json is private; skipping publish."
-            exit 0
-          fi
-          npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-
+      - name: Create/Update GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: v${{ steps.pkg.outputs.version }}
+          name: sql-storage-adapter v${{ steps.pkg.outputs.version }}
+          body: ${{ steps.notes.outputs.notes }}
+          allowUpdates: true
