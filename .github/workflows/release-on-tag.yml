@@ -30,6 +30,8 @@ jobs:
           else
             npm install
           fi
+      - name: Ensure pnpm available for build script
+        run: npm i -g pnpm
       - name: Build
         run: npm run build --if-present
       - name: Test
