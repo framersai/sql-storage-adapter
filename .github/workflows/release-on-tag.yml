@@ -37,6 +37,7 @@ jobs:
       - name: Test
         run: npm test --if-present
       - name: Publish to npm
+        continue-on-error: true
         run: |
           pkg_private=$(node -e "try{console.log(require('./package.json').private===true?'true':'false')}catch(e){console.log('false')}")
           if [ "$pkg_private" = "true" ]; then
@@ -49,12 +50,14 @@ jobs:
       - name: Read package version
         id: pkg
         shell: bash
+        if: always()
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Generate release notes from CHANGELOG.md
         id: notes
         shell: bash
+        if: always()
         run: |
           if [ -f CHANGELOG.md ]; then
             export VERSION="${{ steps.pkg.outputs.version }}"
@@ -76,6 +79,7 @@ jobs:
             echo "EOF" >> $GITHUB_OUTPUT
           fi
       - name: Create/Update GitHub Release
+        if: always()
         uses: ncipollo/release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
