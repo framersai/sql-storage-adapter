@@ -24,8 +24,8 @@
   ],
   "scripts": {
     "clean": "rimraf dist tsconfig.build.tsbuildinfo",
-    "build": "pnpm run clean && pnpm exec tsc -p tsconfig.build.json && node scripts/fix-esm-imports.mjs",
-    "prepublishOnly": "pnpm run build && pnpm run test",
+    "build": "npm run clean && npx tsc -p tsconfig.build.json && node scripts/fix-esm-imports.mjs",
+    "prepublishOnly": "npm run build && npm run test",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\"",
