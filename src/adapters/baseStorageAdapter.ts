@@ -60,6 +60,7 @@ import type {
   PerformanceSettings,
   CacheEntry,
   CacheStats,
+  MutableCacheStats,
 } from '../core/contracts/performance';
 
 import {
@@ -201,7 +202,7 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
   
   // Cache
   private queryCache: Map<string, CacheEntry> = new Map();
-  private cacheStats: CacheStats = {
+  private cacheStats: MutableCacheStats = {
     hits: 0,
     misses: 0,
     hitRatio: 0,
@@ -419,7 +420,7 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
       if (this.hooks.onAfterQuery) {
         const hookResult = await this.hooks.onAfterQuery(context, result);
         if (hookResult !== undefined) {
-          result = hookResult as T | null;
+          result = hookResult as Awaited<T> | null;
         }
       }
       

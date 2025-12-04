@@ -358,7 +358,7 @@ export interface CacheEntry<T = unknown> {
 }
 
 /**
- * Cache statistics for monitoring.
+ * Cache statistics for monitoring (public API is readonly).
  */
 export interface CacheStats {
   /** Total cache hits */
@@ -382,6 +382,13 @@ export interface CacheStats {
   /** Number of invalidations */
   readonly invalidations: number;
 }
+
+/**
+ * Mutable version of CacheStats for internal use.
+ */
+export type MutableCacheStats = {
+  -readonly [K in keyof CacheStats]: CacheStats[K];
+};
 
 // ============================================================================
 // Utility Functions
