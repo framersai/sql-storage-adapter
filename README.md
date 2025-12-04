@@ -39,7 +39,7 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 - **Capability-aware API** – consistent CRUD, transactions, batching, and event hooks across adapters with runtime capability introspection.
 - **🆕 IndexedDB** – sql.js + IndexedDB persistence wrapper for browser-native, offline-first web apps (uses sql.js for SQL execution, IndexedDB for storage).
 - **🆕 Performance Tiers** – Configurable `fast`, `balanced`, `accurate`, `efficient` presets for cost/accuracy tradeoffs. See [Optimization Guide](./docs/OPTIMIZATION_GUIDE.md).
-- **🆕 RAG-Ready Hooks** – Lifecycle hooks (`onBeforeQuery`, `onAfterQuery`, `onBeforeWrite`, `onAfterWrite`) for embedding generation, vector index updates, and analytics.
+- **🆕 Lifecycle Hooks** – Extensible hooks (`onBeforeQuery`, `onAfterQuery`, `onBeforeWrite`, `onAfterWrite`) for logging, analytics, caching, and custom extensions.
 - **Cloud backups & migrations** – built-in backup manager with compression, retention policies, and restore helpers plus migration utilities.
 - **Portable packaging** – optional native dependencies; falls back to pure TypeScript/WASM adapters when native modules are unavailable.
 - **Browser-friendly** – Dynamic imports prevent bundlers from including server-only dependencies (`pg`, `path`) in browser builds.
@@ -235,8 +235,8 @@ const prodDb = await createDatabase({
   performance: { tier: 'balanced' }
 });
 
-// RAG System: Accurate tier - no caching, full validation
-const ragDb = await createDatabase({
+// Analytics/Reporting: Accurate tier - no caching, full validation
+const analyticsDb = await createDatabase({
   postgres: { connectionString: process.env.DATABASE_URL },
   performance: { tier: 'accurate', trackMetrics: true }
 });
@@ -252,38 +252,29 @@ const mobileDb = await createDatabase({
 |------|---------|----------|------------|----------|
 | `fast` | Aggressive | Yes | Minimal | Development, testing |
 | `balanced` | Moderate | No | Standard | General production |
-| `accurate` | Disabled | No | Full | RAG, analytics |
+| `accurate` | Disabled | No | Full | Analytics, reporting |
 | `efficient` | Moderate | Yes | Minimal | Mobile, IoT |
 
 See [**docs/OPTIMIZATION_GUIDE.md**](./docs/OPTIMIZATION_GUIDE.md) for detailed configuration options.
 
-## RAG-Ready Hooks
+## Lifecycle Hooks
 
-The adapter provides lifecycle hooks for RAG (Retrieval Augmented Generation) integration:
+The adapter provides lifecycle hooks for extending behavior:
 
 ```typescript
 import { createDatabase, type StorageHooks } from '@framers/sql-storage-adapter';
 
-const ragHooks: StorageHooks = {
-  // Generate embeddings on document insert
+const myHooks: StorageHooks = {
+  // Log all writes
   onBeforeWrite: async (context) => {
-    if (context.statement.includes('INSERT INTO documents')) {
-      const content = context.parameters?.[1] as string;
-      if (content) {
-        const embedding = await generateEmbedding(content);
-        context.metadata = { ...context.metadata, embedding };
-      }
-    }
+    console.log(`Write operation: ${context.statement}`);
     return context;
   },
   
-  // Update vector index after insert
+  // Track metrics after writes
   onAfterWrite: async (context, result) => {
-    if (context.metadata?.embedding && result.lastInsertRowid) {
-      await vectorStore.upsert({
-        id: String(result.lastInsertRowid),
-        embedding: context.metadata.embedding
-      });
+    if (result.changes > 0) {
+      console.log(`Modified ${result.changes} rows`);
     }
   },
   
@@ -298,8 +289,8 @@ const ragHooks: StorageHooks = {
 };
 
 const db = await createDatabase({
-  performance: { tier: 'accurate' },
-  hooks: ragHooks
+  performance: { tier: 'balanced' },
+  hooks: myHooks
 });
 ```
 
@@ -309,11 +300,11 @@ const db = await createDatabase({
 |------|---------|-----------|
 | `onBeforeQuery` | Before SELECT/exec | Query transformation, caching, logging |
 | `onAfterQuery` | After successful query | Result transformation, metrics |
-| `onBeforeWrite` | Before INSERT/UPDATE/DELETE | Validation, embedding generation |
-| `onAfterWrite` | After successful write | Cache invalidation, vector indexing |
+| `onBeforeWrite` | Before INSERT/UPDATE/DELETE | Validation, auditing, transformation |
+| `onAfterWrite` | After successful write | Cache invalidation, sync triggers |
 | `onError` | On any error | Error transformation, alerting |
 
-See [**docs/OPTIMIZATION_GUIDE.md#rag-integration-points**](./docs/OPTIMIZATION_GUIDE.md#rag-integration-points) for complete examples.
+See [**docs/OPTIMIZATION_GUIDE.md**](./docs/OPTIMIZATION_GUIDE.md) for complete configuration options.
 
 ## CI, Releases, and Badges
 

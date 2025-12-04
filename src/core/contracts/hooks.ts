@@ -4,11 +4,11 @@
  * This module defines the hook system that enables extending adapter behavior
  * without modifying core implementations. Hooks are particularly useful for:
  * 
- * - **RAG Systems**: Embedding generation, vector index updates
  * - **Analytics**: Query logging, performance monitoring
  * - **Auditing**: Write logging, compliance tracking
  * - **Caching**: Custom cache strategies, invalidation
  * - **Transformation**: Query/result modification
+ * - **Extensions**: Build higher-level abstractions on top
  * 
  * @packageDocumentation
  * @module @framers/sql-storage-adapter/hooks
@@ -20,21 +20,18 @@
  * 3. `onAfterQuery`/`onAfterWrite` - After successful execution
  * 4. `onError` - If an error occurred
  * 
- * @example RAG integration with embedding generation
+ * @example Audit logging hook
  * ```typescript
  * import { createDatabase, type StorageHooks } from '@framers/sql-storage-adapter';
  * 
- * const ragHooks: StorageHooks = {
+ * const auditHooks: StorageHooks = {
  *   onBeforeWrite: async (context) => {
- *     if (context.metadata?.generateEmbedding) {
- *       const content = context.parameters?.[1] as string;
- *       context.metadata.embedding = await generateEmbedding(content);
- *     }
+ *     console.log(`[AUDIT] ${context.operation}: ${context.statement}`);
  *     return context;
  *   }
  * };
  * 
- * const db = await createDatabase({ hooks: ragHooks });
+ * const db = await createDatabase({ hooks: auditHooks });
  * ```
  */
 
@@ -78,12 +75,12 @@ export interface OperationContext {
    * Hooks can read and modify this to pass data between hooks
    * or to the calling code.
    * 
-   * @example Marking a query as RAG-related
+   * @example Marking a query for special handling
    * ```typescript
    * const results = await db.all(
-   *   'SELECT * FROM documents WHERE id = ?',
-   *   [docId],
-   *   { metadata: { isRagQuery: true, queryEmbedding: [...] } }
+   *   'SELECT * FROM users WHERE id = ?',
+   *   [userId],
+   *   { metadata: { skipCache: true, auditLevel: 'high' } }
    * );
    * ```
    */
@@ -256,7 +253,7 @@ export type ErrorHookResult = Error | undefined | void;
  * Hooks execute sequentially per operation but may run
  * concurrently across different operations.
  * 
- * @example Complete hook setup for RAG + Analytics
+ * @example Complete hook setup for logging and metrics
  * ```typescript
  * const hooks: StorageHooks = {
  *   // Log all queries
@@ -272,22 +269,17 @@ export type ErrorHookResult = Error | undefined | void;
  *     return result;
  *   },
  *   
- *   // Generate embeddings on document insert
+ *   // Audit write operations
  *   onBeforeWrite: async (ctx) => {
- *     if (ctx.statement.includes('INSERT INTO documents')) {
- *       const content = ctx.parameters?.[1];
- *       ctx.metadata = { 
- *         ...ctx.metadata, 
- *         embedding: await embed(content) 
- *       };
- *     }
+ *     console.log(`[AUDIT] ${ctx.operation}: ${ctx.statement}`);
+ *     ctx.metadata = { ...ctx.metadata, auditedAt: Date.now() };
  *     return ctx;
  *   },
  *   
- *   // Update vector index after insert
+ *   // Track writes
  *   onAfterWrite: async (ctx, result) => {
- *     if (ctx.metadata?.embedding && result.lastInsertRowid) {
- *       await vectorIndex.add(result.lastInsertRowid, ctx.metadata.embedding);
+ *     if (result.changes > 0) {
+ *       metrics.increment('db.writes', result.changes);
  *     }
  *   },
  *   
@@ -361,24 +353,22 @@ export interface StorageHooks {
    * 
    * Use for:
    * - Validation
-   * - Embedding generation (RAG)
    * - Audit logging
    * - Timestamp injection
    * - Encryption
+   * - Custom transformations
    * 
    * @param context - Write context (mutable)
    * @returns Modified context, original context, or undefined to skip
    * 
-   * @example Automatic embedding generation
+   * @example Automatic timestamp injection
    * ```typescript
    * onBeforeWrite: async (ctx) => {
-   *   if (ctx.statement.includes('INSERT INTO documents')) {
-   *     const content = ctx.parameters?.[1];
-   *     if (content && typeof content === 'string') {
-   *       const embedding = await embeddingService.embed(content);
-   *       // Store embedding for use in onAfterWrite
-   *       ctx.metadata = { ...ctx.metadata, embedding };
-   *     }
+   *   if (ctx.statement.includes('INSERT INTO')) {
+   *     ctx.metadata = { 
+   *       ...ctx.metadata, 
+   *       insertedAt: Date.now() 
+   *     };
    *   }
    *   return ctx;
    * }
@@ -391,23 +381,20 @@ export interface StorageHooks {
    * 
    * Use for:
    * - Cache invalidation
-   * - Vector index updates (RAG)
    * - Sync triggers
    * - Notification dispatch
    * - Audit completion
+   * - External service updates
    * 
    * @param context - Write context (read-only)
    * @param result - Write result
    * 
-   * @example Update vector index after document insert
+   * @example Trigger sync after write
    * ```typescript
    * onAfterWrite: async (ctx, result) => {
-   *   if (ctx.metadata?.embedding && result.lastInsertRowid) {
-   *     await vectorStore.upsert({
-   *       id: String(result.lastInsertRowid),
-   *       embedding: ctx.metadata.embedding,
-   *       metadata: { table: 'documents' }
-   *     });
+   *   if (result.changes > 0) {
+   *     await syncService.markDirty(ctx.affectedTables);
+   *     console.log(`Updated ${result.changes} rows`);
    *   }
    * }
    * ```

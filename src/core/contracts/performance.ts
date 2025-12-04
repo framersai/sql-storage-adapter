@@ -11,7 +11,7 @@
  * @remarks
  * The performance system is designed to be:
  * - **Platform-agnostic**: Same API across browser, mobile, desktop, cloud
- * - **RAG-ready**: Hooks and metadata support for embedding systems
+ * - **Extensible**: Hooks and metadata support for custom extensions
  * - **Configurable**: Sensible defaults with full override capability
  * - **Observable**: Built-in metrics and slow query logging
  * 
@@ -24,8 +24,8 @@
  *   performance: { tier: 'fast' }
  * });
  * 
- * // Production RAG: prioritize accuracy
- * const ragDb = await createDatabase({
+ * // Production analytics: prioritize accuracy
+ * const analyticsDb = await createDatabase({
  *   performance: { tier: 'accurate', trackMetrics: true }
  * });
  * ```
@@ -45,7 +45,7 @@
  * |------|----------|---------|----------|------------|
  * | `fast` | Development, testing | Aggressive | Yes | Minimal |
  * | `balanced` | General production | Moderate | No | Standard |
- * | `accurate` | RAG, analytics | Disabled | No | Full |
+ * | `accurate` | Analytics, reporting | Disabled | No | Full |
  * | `efficient` | Mobile, battery-constrained | Moderate | Yes | Minimal |
  * | `custom` | Full manual control | Manual | Manual | Manual |
  * 
@@ -60,7 +60,7 @@
 export type PerformanceTier = 
   | 'fast'      // Prioritize speed over accuracy (dev/testing)
   | 'balanced'  // Default - good for most production apps
-  | 'accurate'  // Prioritize accuracy over speed (RAG, analytics)
+  | 'accurate'  // Prioritize accuracy over speed (analytics, reporting)
   | 'efficient' // Prioritize battery/bandwidth (mobile, IoT)
   | 'custom';   // Fully custom configuration
 
@@ -209,7 +209,7 @@ export interface PerformanceConfig {
    * @remarks
    * - Caching is per-adapter instance (not shared)
    * - Cache is invalidated on any write operation to affected tables
-   * - Use `accurate` tier for RAG systems where stale data is unacceptable
+   * - Use `accurate` tier for systems where stale data is unacceptable
    * 
    * @defaultValue tier-dependent
    */

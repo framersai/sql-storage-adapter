@@ -10,7 +10,7 @@
 2. [Performance Tiers](#performance-tiers)
 3. [Cost vs Accuracy Tradeoffs](#cost-vs-accuracy-tradeoffs)
 4. [Platform-Specific Optimization](#platform-specific-optimization)
-5. [RAG Integration Points](#rag-integration-points)
+5. [Extension Points](#extension-points)
 6. [Configuration Reference](#configuration-reference)
 7. [Best Practices](#best-practices)
 8. [Monitoring & Metrics](#monitoring--metrics)
@@ -19,7 +19,7 @@
 
 ## Overview
 
-The SQL Storage Adapter is designed as a **platform-agnostic foundation** that powers both direct SQL operations and higher-level systems like RAG (Retrieval Augmented Generation). This guide explains how to configure the adapter for optimal performance across different use cases:
+The SQL Storage Adapter is designed as a **platform-agnostic foundation** for cross-platform SQL operations. This guide explains how to configure the adapter for optimal performance across different use cases:
 
 | Use Case | Priority | Recommended Config |
 |----------|----------|-------------------|
@@ -138,8 +138,8 @@ const mobileDb = await createDatabase({
   }
 });
 
-// RAG system: Accurate tier for consistent retrieval
-const ragDb = await createDatabase({
+// Analytics system: Accurate tier for consistent results
+const analyticsDb = await createDatabase({
   postgres: { connectionString: process.env.DATABASE_URL },
   performance: { 
     tier: 'accurate',
@@ -157,7 +157,7 @@ const ragDb = await createDatabase({
 
 | Scenario | Cost Factor | Accuracy Need | Recommended |
 |----------|-------------|---------------|-------------|
-| Semantic search | High (LLM calls) | High | `accurate` + caching |
+| Full-text search | Medium | High | `accurate` + caching |
 | User preferences | Low | Medium | `balanced` |
 | Session data | Low | Low | `fast` + batching |
 | Offline sync | Medium (bandwidth) | High | `efficient` + validation |
@@ -316,16 +316,16 @@ const cloudDb = await createDatabase({
 
 ---
 
-## RAG Integration Points
+## Extension Points
 
-The SQL Storage Adapter is designed to be **RAG-ready** without being RAG-specific. This section documents extension points for RAG systems.
+The SQL Storage Adapter provides lifecycle hooks for extending behavior without modifying core implementations.
 
 ### Lifecycle Hooks
 
 ```typescript
 /**
  * Hooks for extending adapter behavior.
- * Perfect for RAG systems, analytics, and auditing.
+ * Use for logging, analytics, caching, and auditing.
  */
 export interface StorageHooks {
   /**
@@ -342,13 +342,13 @@ export interface StorageHooks {
   
   /**
    * Called before any write operation.
-   * Use for validation, transformation, or embedding generation.
+   * Use for validation, transformation, or auditing.
    */
   onBeforeWrite?: (context: WriteContext) => Promise<WriteContext | void>;
   
   /**
    * Called after write operation.
-   * Use for cache invalidation, sync triggers, or indexing.
+   * Use for cache invalidation, sync triggers, or logging.
    */
   onAfterWrite?: (context: WriteContext, result: StorageRunResult) => Promise<void>;
   
@@ -358,98 +358,41 @@ export interface StorageHooks {
    */
   onError?: (error: Error, context: OperationContext) => Promise<Error | void>;
 }
-
-interface QueryContext {
-  statement: string;
-  parameters?: StorageParameters;
-  operation: 'get' | 'all' | 'exec';
-  startTime: number;
-  metadata?: Record<string, unknown>;
-}
-
-interface WriteContext {
-  statement: string;
-  parameters?: StorageParameters;
-  operation: 'run' | 'batch';
-  startTime: number;
-  metadata?: Record<string, unknown>;
-}
 ```
 
-### RAG Extension Example
+### Hook Example: Audit Logging
 
 ```typescript
 import { createDatabase, type StorageHooks } from '@framers/sql-storage-adapter';
 
-// RAG-specific hooks for embedding management
-const ragHooks: StorageHooks = {
+// Audit logging hooks
+const auditHooks: StorageHooks = {
   onBeforeWrite: async (context) => {
-    // Intercept writes to documents table
-    if (context.statement.includes('INSERT INTO documents')) {
-      const content = context.parameters?.[1] as string;
-      if (content) {
-        // Generate embedding (this would call your embedding service)
-        const embedding = await generateEmbedding(content);
-        // Add embedding to parameters
-        context.metadata = { ...context.metadata, embedding };
-      }
-    }
+    console.log(`[AUDIT] Write operation: ${context.operation}`);
+    console.log(`[AUDIT] Statement: ${context.statement}`);
     return context;
   },
   
   onAfterWrite: async (context, result) => {
-    // Trigger vector index update after document insert
-    if (context.metadata?.embedding && result.lastInsertRowid) {
-      await updateVectorIndex(result.lastInsertRowid, context.metadata.embedding);
-    }
+    console.log(`[AUDIT] Rows affected: ${result.changes}`);
   },
   
   onAfterQuery: async (context, result) => {
-    // Add relevance scores to RAG queries
-    if (context.metadata?.isRagQuery && Array.isArray(result)) {
-      return result.map(row => ({
-        ...row,
-        relevanceScore: calculateRelevance(row, context.metadata?.queryEmbedding)
-      }));
-    }
+    const duration = Date.now() - context.startTime;
+    console.log(`[METRICS] Query took ${duration}ms`);
     return result;
+  },
+  
+  onError: async (error, context) => {
+    console.error(`[ERROR] ${context.operation} failed:`, error.message);
+    return error;
   }
 };
 
-const ragDb = await createDatabase({
-  postgres: { connectionString: process.env.DATABASE_URL },
-  performance: { tier: 'accurate' },
-  hooks: ragHooks
+const db = await createDatabase({
+  performance: { tier: 'balanced' },
+  hooks: auditHooks
 });
-```
-
-### Embedding Metadata Schema
-
-For RAG systems, the adapter supports metadata columns for embedding storage:
-
-```sql
--- Recommended schema for RAG-enabled tables
-CREATE TABLE documents (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  content TEXT NOT NULL,
-  content_hash TEXT GENERATED ALWAYS AS (md5(content)) STORED,
-  
-  -- Embedding metadata (adapter-agnostic)
-  embedding_model TEXT,           -- e.g., 'text-embedding-3-small'
-  embedding_dimension INTEGER,    -- e.g., 1536
-  embedding_updated_at TIMESTAMP,
-  
-  -- The actual embedding (stored separately for flexibility)
-  -- Can be BYTEA (portable) or vector type (pgvector)
-  embedding_blob BYTEA,
-  
-  -- Standard audit columns
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Index for content-based deduplication
-CREATE INDEX idx_documents_hash ON documents(content_hash);
 ```
 
 ---
@@ -711,7 +654,7 @@ const db = await createDatabase({
 | Version | Changes |
 |---------|---------|
 | 1.0.0 | Initial release with performance tiers |
-| 1.1.0 | Added RAG hooks and embedding metadata support |
+| 1.1.0 | Added lifecycle hooks for extensibility |
 | 1.2.0 | Added custom logger interface |
 
 ---

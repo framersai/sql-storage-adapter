@@ -119,6 +119,12 @@ export interface BaseAdapterOptions {
   verbose?: boolean;
   
   /** 
+   * Enable performance tracking and metrics collection.
+   * @defaultValue true when tier is 'balanced' or 'accurate'
+   */
+  trackPerformance?: boolean;
+  
+  /** 
    * Performance tier configuration.
    * Controls caching, batching, validation, and retry behavior.
    * @defaultValue { tier: 'balanced' }
