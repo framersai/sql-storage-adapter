@@ -267,3 +267,19 @@ export class StorageResolutionError extends Error {
   }
 }
 
+// ============================================================================
+// Re-export Performance and Hooks Types
+// ============================================================================
+
+/**
+ * Performance configuration types for cost/accuracy optimization.
+ * See `OPTIMIZATION_GUIDE.md` for detailed usage documentation.
+ */
+export * from './performance';
+
+/**
+ * Lifecycle hooks for extending adapter behavior.
+ * Designed for RAG integration, analytics, and auditing.
+ */
+export * from './hooks';
+
