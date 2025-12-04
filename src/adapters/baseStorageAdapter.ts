@@ -9,7 +9,9 @@
  * - Parameter validation and sanitization
  * - Error handling and standardization
  * - Lifecycle management (open/close state tracking)
- * - Performance monitoring
+ * - Performance monitoring with configurable tiers
+ * - Query result caching (optional)
+ * - Lifecycle hooks for RAG integration
  * - Logging and diagnostics
  * 
  * @example Implementing a new adapter
@@ -26,6 +28,20 @@
  *   // ... implement other abstract methods
  * }
  * ```
+ * 
+ * @example Using with performance tiers and hooks
+ * ```typescript
+ * const adapter = new MyAdapter({
+ *   performance: { tier: 'balanced', trackMetrics: true },
+ *   hooks: {
+ *     onBeforeWrite: async (ctx) => {
+ *       // Generate embedding for RAG
+ *       ctx.metadata = { embedding: await embed(ctx.parameters?.[0]) };
+ *       return ctx;
+ *     }
+ *   }
+ * });
+ * ```
  */
 
 import type {
@@ -38,6 +54,28 @@ import type {
   BatchResult,
   PreparedStatement
 } from '../core/contracts';
+
+import type {
+  PerformanceConfig,
+  PerformanceSettings,
+  CacheEntry,
+  CacheStats,
+} from '../core/contracts/performance';
+
+import {
+  resolvePerformanceConfig,
+  isTransientError,
+} from '../core/contracts/performance';
+
+import type {
+  StorageHooks,
+  QueryContext,
+  WriteContext,
+  TransactionContext,
+  OperationContext,
+} from '../core/contracts/hooks';
+
+import { generateOperationId } from '../core/contracts/hooks';
 
 /**
  * Base state for all adapters.
@@ -52,16 +90,46 @@ enum AdapterState {
 
 /**
  * Options for BaseStorageAdapter configuration.
+ * 
+ * @example Basic options
+ * ```typescript
+ * const adapter = new MyAdapter({ verbose: true });
+ * ```
+ * 
+ * @example With performance tier
+ * ```typescript
+ * const adapter = new MyAdapter({
+ *   performance: { tier: 'fast' }
+ * });
+ * ```
+ * 
+ * @example With hooks for RAG
+ * ```typescript
+ * const adapter = new MyAdapter({
+ *   hooks: {
+ *     onAfterWrite: async (ctx, result) => {
+ *       await updateVectorIndex(result.lastInsertRowid, ctx.metadata?.embedding);
+ *     }
+ *   }
+ * });
+ * ```
  */
 export interface BaseAdapterOptions {
   /** Enable detailed logging (default: false) */
   verbose?: boolean;
-  /** Validate SQL statements before execution (default: true) */
-  validateSQL?: boolean;
-  /** Track performance metrics (default: true) */
-  trackPerformance?: boolean;
-  /** Max retry attempts for transient errors (default: 3) */
-  maxRetries?: number;
+  
+  /** 
+   * Performance tier configuration.
+   * Controls caching, batching, validation, and retry behavior.
+   * @defaultValue { tier: 'balanced' }
+   */
+  performance?: PerformanceConfig;
+  
+  /**
+   * Lifecycle hooks for extending adapter behavior.
+   * Useful for RAG integration, logging, analytics, and auditing.
+   */
+  hooks?: StorageHooks;
 }
 
 /**
@@ -80,6 +148,12 @@ export interface AdapterMetrics {
   averageQueryDuration: number;
   /** Time when adapter was opened */
   openedAt: Date | null;
+  /** Cache statistics (if caching enabled) */
+  cache?: CacheStats;
+  /** Slow query count */
+  slowQueries: number;
+  /** Retry count */
+  retries: number;
 }
 
 /**
@@ -89,7 +163,9 @@ export interface AdapterMetrics {
  * - State management (open/close tracking)
  * - Parameter validation
  * - Error handling and wrapping
- * - Performance metrics
+ * - Performance metrics with configurable tiers
+ * - Query result caching (tier-dependent)
+ * - Lifecycle hooks for RAG and analytics
  * - Logging and diagnostics
  */
 export abstract class BaseStorageAdapter implements StorageAdapter {
@@ -101,7 +177,9 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
   private state: AdapterState = AdapterState.CLOSED;
   
   // Configuration
-  protected readonly options: Required<BaseAdapterOptions>;
+  protected readonly options: BaseAdapterOptions;
+  protected readonly performanceSettings: PerformanceSettings;
+  protected readonly hooks: StorageHooks;
   
   // Metrics
   private metrics: AdapterMetrics = {
@@ -110,7 +188,21 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
     totalTransactions: 0,
     totalErrors: 0,
     averageQueryDuration: 0,
-    openedAt: null
+    openedAt: null,
+    slowQueries: 0,
+    retries: 0,
+  };
+  
+  // Cache
+  private queryCache: Map<string, CacheEntry> = new Map();
+  private cacheStats: CacheStats = {
+    hits: 0,
+    misses: 0,
+    hitRatio: 0,
+    size: 0,
+    bytesUsed: 0,
+    evictions: 0,
+    invalidations: 0,
   };
   
   // Performance tracking
@@ -121,14 +213,36 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
    * Creates a new adapter instance.
    * 
    * @param options - Configuration options for the adapter
+   * 
+   * @example Default balanced tier
+   * ```typescript
+   * const adapter = new MyAdapter();
+   * ```
+   * 
+   * @example Fast tier for development
+   * ```typescript
+   * const adapter = new MyAdapter({
+   *   performance: { tier: 'fast' },
+   *   verbose: true
+   * });
+   * ```
+   * 
+   * @example With RAG hooks
+   * ```typescript
+   * const adapter = new MyAdapter({
+   *   hooks: {
+   *     onBeforeWrite: async (ctx) => {
+   *       ctx.metadata = { embedding: await embed(ctx.parameters) };
+   *       return ctx;
+   *     }
+   *   }
+   * });
+   * ```
    */
   constructor(options: BaseAdapterOptions = {}) {
-    this.options = {
-      verbose: options.verbose ?? false,
-      validateSQL: options.validateSQL ?? true,
-      trackPerformance: options.trackPerformance ?? true,
-      maxRetries: options.maxRetries ?? 3
-    };
+    this.options = options;
+    this.performanceSettings = resolvePerformanceConfig(options.performance);
+    this.hooks = options.hooks ?? {};
   }
 
   // ============================================================================
@@ -165,73 +279,248 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
 
   /**
    * Executes a mutation statement (INSERT, UPDATE, DELETE).
+   * 
+   * Invokes `onBeforeWrite` and `onAfterWrite` hooks if configured.
+   * Supports retry on transient errors based on performance tier.
    */
   public async run(statement: string, parameters?: StorageParameters): Promise<StorageRunResult> {
     this.assertOpen();
     this.validateStatement(statement);
     
     const startTime = Date.now();
+    const operationId = generateOperationId();
+    
+    // Build write context for hooks
+    let context: WriteContext = {
+      operationId,
+      operation: 'run',
+      startTime,
+      adapterKind: this.kind,
+      statement,
+      parameters,
+      affectedTables: this.extractTables(statement),
+    };
     
     try {
-      const result = await this.performRun(statement, parameters);
+      // Execute onBeforeWrite hook
+      if (this.hooks.onBeforeWrite) {
+        const hookResult = await this.hooks.onBeforeWrite(context);
+        if (hookResult === undefined) {
+          // Hook aborted the operation
+          return { changes: 0 };
+        }
+        context = hookResult;
+      }
       
+      // Execute with retry logic
+      const result = await this.executeWithRetry(
+        () => this.performRun(context.statement, context.parameters),
+        context
+      );
+      
+      const duration = Date.now() - startTime;
       this.metrics.totalMutations++;
-      this.trackDuration(Date.now() - startTime);
+      this.trackDuration(duration);
+      this.checkSlowQuery(duration, context.statement);
+      
+      // Invalidate cache for affected tables
+      if (this.performanceSettings.cacheEnabled && context.affectedTables) {
+        this.invalidateCache(context.affectedTables);
+      }
       
       this.log(`Mutation executed: ${statement.substring(0, 50)}... (${result.changes} rows affected)`);
+      
+      // Execute onAfterWrite hook
+      if (this.hooks.onAfterWrite) {
+        await this.hooks.onAfterWrite(context, result);
+      }
       
       return result;
     } catch (error) {
       this.metrics.totalErrors++;
-      throw this.wrapError(`Failed to execute mutation: ${statement}`, error);
+      const wrappedError = this.wrapError(`Failed to execute mutation: ${statement}`, error);
+      
+      // Execute onError hook
+      if (this.hooks.onError) {
+        const hookResult = await this.hooks.onError(wrappedError, context);
+        if (hookResult === undefined) {
+          // Hook suppressed the error
+          return { changes: 0 };
+        }
+        throw hookResult;
+      }
+      
+      throw wrappedError;
     }
   }
 
   /**
    * Retrieves a single row.
+   * 
+   * Supports caching based on performance tier and invokes query hooks.
    */
   public async get<T = unknown>(statement: string, parameters?: StorageParameters): Promise<T | null> {
     this.assertOpen();
     this.validateStatement(statement);
     
     const startTime = Date.now();
+    const operationId = generateOperationId();
+    const cacheKey = this.getCacheKey(statement, parameters);
+    
+    // Check cache first
+    if (this.performanceSettings.cacheEnabled) {
+      const cached = this.getFromCache<T | null>(cacheKey);
+      if (cached !== undefined) {
+        return cached;
+      }
+    }
+    
+    // Build query context for hooks
+    let context: QueryContext = {
+      operationId,
+      operation: 'get',
+      startTime,
+      adapterKind: this.kind,
+      statement,
+      parameters,
+      affectedTables: this.extractTables(statement),
+    };
     
     try {
-      const result = await this.performGet<T>(statement, parameters);
+      // Execute onBeforeQuery hook
+      if (this.hooks.onBeforeQuery) {
+        const hookResult = await this.hooks.onBeforeQuery(context);
+        if (hookResult === undefined) {
+          return null; // Hook aborted
+        }
+        context = hookResult;
+      }
       
+      // Execute with retry
+      let result = await this.executeWithRetry(
+        () => this.performGet<T>(context.statement, context.parameters),
+        context
+      );
+      
+      const duration = Date.now() - startTime;
       this.metrics.totalQueries++;
-      this.trackDuration(Date.now() - startTime);
+      this.trackDuration(duration);
+      this.checkSlowQuery(duration, context.statement);
       
       this.log(`Query executed: ${statement.substring(0, 50)}... (${result ? '1 row' : 'no rows'})`);
+      
+      // Execute onAfterQuery hook
+      if (this.hooks.onAfterQuery) {
+        const hookResult = await this.hooks.onAfterQuery(context, result);
+        if (hookResult !== undefined) {
+          result = hookResult as T | null;
+        }
+      }
+      
+      // Cache the result
+      if (this.performanceSettings.cacheEnabled) {
+        this.setCache(cacheKey, result, context.affectedTables);
+      }
       
       return result;
     } catch (error) {
       this.metrics.totalErrors++;
-      throw this.wrapError(`Failed to execute query: ${statement}`, error);
+      const wrappedError = this.wrapError(`Failed to execute query: ${statement}`, error);
+      
+      if (this.hooks.onError) {
+        const hookResult = await this.hooks.onError(wrappedError, context);
+        if (hookResult === undefined) {
+          return null;
+        }
+        throw hookResult;
+      }
+      
+      throw wrappedError;
     }
   }
 
   /**
    * Retrieves all rows.
+   * 
+   * Supports caching based on performance tier and invokes query hooks.
    */
   public async all<T = unknown>(statement: string, parameters?: StorageParameters): Promise<T[]> {
     this.assertOpen();
     this.validateStatement(statement);
     
     const startTime = Date.now();
+    const operationId = generateOperationId();
+    const cacheKey = this.getCacheKey(statement, parameters);
+    
+    // Check cache first
+    if (this.performanceSettings.cacheEnabled) {
+      const cached = this.getFromCache<T[]>(cacheKey);
+      if (cached !== undefined) {
+        return cached;
+      }
+    }
+    
+    // Build query context for hooks
+    let context: QueryContext = {
+      operationId,
+      operation: 'all',
+      startTime,
+      adapterKind: this.kind,
+      statement,
+      parameters,
+      affectedTables: this.extractTables(statement),
+    };
     
     try {
-      const results = await this.performAll<T>(statement, parameters);
+      // Execute onBeforeQuery hook
+      if (this.hooks.onBeforeQuery) {
+        const hookResult = await this.hooks.onBeforeQuery(context);
+        if (hookResult === undefined) {
+          return []; // Hook aborted
+        }
+        context = hookResult;
+      }
       
+      // Execute with retry
+      let results = await this.executeWithRetry(
+        () => this.performAll<T>(context.statement, context.parameters),
+        context
+      );
+      
+      const duration = Date.now() - startTime;
       this.metrics.totalQueries++;
-      this.trackDuration(Date.now() - startTime);
+      this.trackDuration(duration);
+      this.checkSlowQuery(duration, context.statement);
       
       this.log(`Query executed: ${statement.substring(0, 50)}... (${results.length} rows)`);
+      
+      // Execute onAfterQuery hook
+      if (this.hooks.onAfterQuery) {
+        const hookResult = await this.hooks.onAfterQuery(context, results);
+        if (hookResult !== undefined) {
+          results = hookResult as T[];
+        }
+      }
+      
+      // Cache the result
+      if (this.performanceSettings.cacheEnabled) {
+        this.setCache(cacheKey, results, context.affectedTables);
+      }
       
       return results;
     } catch (error) {
       this.metrics.totalErrors++;
-      throw this.wrapError(`Failed to execute query: ${statement}`, error);
+      const wrappedError = this.wrapError(`Failed to execute query: ${statement}`, error);
+      
+      if (this.hooks.onError) {
+        const hookResult = await this.hooks.onError(wrappedError, context);
+        if (hookResult === undefined) {
+          return [];
+        }
+        throw hookResult;
+      }
+      
+      throw wrappedError;
     }
   }
 
@@ -260,23 +549,70 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
 
   /**
    * Executes a transaction.
+   * 
+   * Invokes transaction hooks and invalidates cache on completion.
    */
   public async transaction<T>(fn: (trx: StorageAdapter) => Promise<T>): Promise<T> {
     this.assertOpen();
     
     const startTime = Date.now();
+    const operationId = generateOperationId();
+    
+    // Build transaction context
+    let context: TransactionContext = {
+      operationId,
+      operation: 'transaction',
+      startTime,
+      adapterKind: this.kind,
+    };
     
     try {
+      // Execute onBeforeTransaction hook
+      if (this.hooks.onBeforeTransaction) {
+        const hookResult = await this.hooks.onBeforeTransaction(context);
+        if (hookResult === undefined) {
+          throw new Error('Transaction aborted by hook');
+        }
+        context = hookResult;
+      }
+      
       const result = await this.performTransaction(fn);
       
+      context.outcome = 'committed';
       this.metrics.totalTransactions++;
       this.trackDuration(Date.now() - startTime);
       this.log('Transaction committed successfully');
       
+      // Invalidate all cache on transaction commit (conservative approach)
+      if (this.performanceSettings.cacheEnabled) {
+        this.clearCache();
+      }
+      
+      // Execute onAfterTransaction hook
+      if (this.hooks.onAfterTransaction) {
+        await this.hooks.onAfterTransaction(context);
+      }
+      
       return result;
     } catch (error) {
+      context.outcome = 'rolled_back';
       this.metrics.totalErrors++;
-      throw this.wrapError('Transaction failed', error);
+      const wrappedError = this.wrapError('Transaction failed', error);
+      
+      // Execute hooks
+      if (this.hooks.onAfterTransaction) {
+        await this.hooks.onAfterTransaction(context);
+      }
+      
+      if (this.hooks.onError) {
+        const hookResult = await this.hooks.onError(wrappedError, context);
+        if (hookResult === undefined) {
+          throw new Error('Transaction rolled back');
+        }
+        throw hookResult;
+      }
+      
+      throw wrappedError;
     }
   }
 
@@ -427,7 +763,7 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
    * @throws {Error} If statement is invalid
    */
   protected validateStatement(statement: string): void {
-    if (!this.options.validateSQL) {
+    if (!this.performanceSettings.validateSql) {
       return;
     }
 
@@ -438,6 +774,236 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
     // Basic SQL injection protection (parameters should be used instead)
     if (statement.includes('--') && !statement.includes('-- ')) {
       this.log('Warning: SQL comment detected in statement');
+    }
+  }
+  
+  // ============================================================================
+  // Cache Management
+  // ============================================================================
+  
+  /**
+   * Generates a cache key for a query.
+   */
+  private getCacheKey(statement: string, parameters?: StorageParameters): string {
+    const paramStr = parameters ? JSON.stringify(parameters) : '';
+    return `${statement}::${paramStr}`;
+  }
+  
+  /**
+   * Gets a value from cache if valid.
+   */
+  private getFromCache<T>(key: string): T | undefined {
+    const entry = this.queryCache.get(key);
+    
+    if (!entry) {
+      this.cacheStats.misses++;
+      this.updateCacheHitRatio();
+      return undefined;
+    }
+    
+    // Check expiration
+    if (Date.now() > entry.expiresAt) {
+      this.queryCache.delete(key);
+      this.cacheStats.misses++;
+      this.updateCacheHitRatio();
+      return undefined;
+    }
+    
+    // Update LRU tracking
+    entry.hits++;
+    entry.lastAccessedAt = Date.now();
+    
+    this.cacheStats.hits++;
+    this.updateCacheHitRatio();
+    
+    return entry.data as T;
+  }
+  
+  /**
+   * Sets a value in cache.
+   */
+  private setCache<T>(key: string, data: T, affectedTables?: string[]): void {
+    // Enforce max entries
+    if (this.queryCache.size >= this.performanceSettings.cacheMaxEntries) {
+      this.evictLRU();
+    }
+    
+    const now = Date.now();
+    const entry: CacheEntry<T> = {
+      data,
+      createdAt: now,
+      expiresAt: now + this.performanceSettings.cacheTtlMs,
+      affectedTables: affectedTables ?? [],
+      hits: 0,
+      lastAccessedAt: now,
+    };
+    
+    this.queryCache.set(key, entry);
+    this.cacheStats.size = this.queryCache.size;
+  }
+  
+  /**
+   * Invalidates cache entries for specific tables.
+   */
+  private invalidateCache(tables: string[]): void {
+    const tableSet = new Set(tables.map(t => t.toLowerCase()));
+    
+    for (const [key, entry] of this.queryCache.entries()) {
+      const hasAffectedTable = entry.affectedTables.some(t => 
+        tableSet.has(t.toLowerCase())
+      );
+      
+      if (hasAffectedTable) {
+        this.queryCache.delete(key);
+        this.cacheStats.invalidations++;
+      }
+    }
+    
+    this.cacheStats.size = this.queryCache.size;
+  }
+  
+  /**
+   * Clears entire cache.
+   */
+  private clearCache(): void {
+    this.queryCache.clear();
+    this.cacheStats.size = 0;
+  }
+  
+  /**
+   * Evicts least recently used cache entry.
+   */
+  private evictLRU(): void {
+    let oldest: { key: string; time: number } | null = null;
+    
+    for (const [key, entry] of this.queryCache.entries()) {
+      if (!oldest || entry.lastAccessedAt < oldest.time) {
+        oldest = { key, time: entry.lastAccessedAt };
+      }
+    }
+    
+    if (oldest) {
+      this.queryCache.delete(oldest.key);
+      this.cacheStats.evictions++;
+    }
+  }
+  
+  /**
+   * Updates cache hit ratio.
+   */
+  private updateCacheHitRatio(): void {
+    const total = this.cacheStats.hits + this.cacheStats.misses;
+    this.cacheStats.hitRatio = total > 0 ? this.cacheStats.hits / total : 0;
+  }
+  
+  // ============================================================================
+  // Retry Logic
+  // ============================================================================
+  
+  /**
+   * Executes an operation with retry logic.
+   */
+  private async executeWithRetry<T>(
+    operation: () => Promise<T>,
+    context: OperationContext
+  ): Promise<T> {
+    if (!this.performanceSettings.retryOnError) {
+      return operation();
+    }
+    
+    let lastError: Error | undefined;
+    
+    for (let attempt = 0; attempt <= this.performanceSettings.maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        if (!isTransientError(lastError) || attempt >= this.performanceSettings.maxRetries) {
+          throw lastError;
+        }
+        
+        this.metrics.retries++;
+        const delay = this.performanceSettings.retryDelayMs * Math.pow(2, attempt);
+        this.log(`Retrying operation ${context.operationId} in ${delay}ms (attempt ${attempt + 1})`);
+        
+        await this.sleep(delay);
+      }
+    }
+    
+    throw lastError;
+  }
+  
+  /**
+   * Sleep utility for retry delays.
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  
+  // ============================================================================
+  // SQL Parsing Utilities
+  // ============================================================================
+  
+  /**
+   * Extracts table names from a SQL statement.
+   * 
+   * @remarks
+   * Simple regex-based extraction. For complex queries, consider
+   * using a proper SQL parser.
+   */
+  private extractTables(statement: string): string[] {
+    const tables: string[] = [];
+    const upperStatement = statement.toUpperCase();
+    
+    // Match FROM table_name
+    const fromMatch = upperStatement.match(/FROM\s+([^\s,;(]+)/gi);
+    if (fromMatch) {
+      fromMatch.forEach(match => {
+        const table = match.replace(/^FROM\s+/i, '').trim();
+        if (table && !table.startsWith('(')) {
+          tables.push(table.toLowerCase());
+        }
+      });
+    }
+    
+    // Match INSERT INTO table_name
+    const insertMatch = statement.match(/INSERT\s+INTO\s+([^\s(]+)/i);
+    if (insertMatch?.[1]) {
+      tables.push(insertMatch[1].toLowerCase());
+    }
+    
+    // Match UPDATE table_name
+    const updateMatch = statement.match(/UPDATE\s+([^\s]+)/i);
+    if (updateMatch?.[1]) {
+      tables.push(updateMatch[1].toLowerCase());
+    }
+    
+    // Match DELETE FROM table_name
+    const deleteMatch = statement.match(/DELETE\s+FROM\s+([^\s]+)/i);
+    if (deleteMatch?.[1]) {
+      tables.push(deleteMatch[1].toLowerCase());
+    }
+    
+    // Match JOIN table_name
+    const joinMatches = statement.match(/JOIN\s+([^\s]+)/gi);
+    if (joinMatches) {
+      joinMatches.forEach(match => {
+        const table = match.replace(/^JOIN\s+/i, '').trim();
+        tables.push(table.toLowerCase());
+      });
+    }
+    
+    return [...new Set(tables)]; // Deduplicate
+  }
+  
+  /**
+   * Checks if query duration exceeds slow query threshold.
+   */
+  private checkSlowQuery(duration: number, statement: string): void {
+    if (duration > this.performanceSettings.slowQueryThresholdMs) {
+      this.metrics.slowQueries++;
+      this.log(`SLOW QUERY (${duration}ms): ${statement.substring(0, 100)}...`);
     }
   }
 
@@ -463,6 +1029,13 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
     if (this.options.verbose) {
       console.log(`[${this.kind}] ${message}`);
     }
+  }
+  
+  /**
+   * Logs a warning message (always outputs regardless of verbose).
+   */
+  protected logWarn(message: string): void {
+    console.warn(`[${this.kind}] ${message}`);
   }
 
   /**
@@ -500,7 +1073,27 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
    * Gets performance metrics.
    */
   public getMetrics(): Readonly<AdapterMetrics> {
-    return { ...this.metrics };
+    return { 
+      ...this.metrics,
+      cache: this.performanceSettings.cacheEnabled ? { ...this.cacheStats } : undefined,
+    };
+  }
+  
+  /**
+   * Gets cache statistics.
+   */
+  public getCacheStats(): Readonly<CacheStats> | null {
+    if (!this.performanceSettings.cacheEnabled) {
+      return null;
+    }
+    return { ...this.cacheStats };
+  }
+  
+  /**
+   * Gets current performance settings.
+   */
+  public getPerformanceSettings(): Readonly<PerformanceSettings> {
+    return { ...this.performanceSettings };
   }
 
   /**
