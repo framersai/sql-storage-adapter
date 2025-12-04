@@ -38,9 +38,12 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 - **Auto-detected adapters** – `createDatabase()` inspects environment signals and picks the best backend (native SQLite, PostgreSQL, Capacitor, sql.js, **IndexedDB**, memory, etc.).
 - **Capability-aware API** – consistent CRUD, transactions, batching, and event hooks across adapters with runtime capability introspection.
 - **🆕 IndexedDB** – sql.js + IndexedDB persistence wrapper for browser-native, offline-first web apps (uses sql.js for SQL execution, IndexedDB for storage).
+- **🆕 Performance Tiers** – Configurable `fast`, `balanced`, `accurate`, `efficient` presets for cost/accuracy tradeoffs. See [Optimization Guide](./docs/OPTIMIZATION_GUIDE.md).
+- **🆕 RAG-Ready Hooks** – Lifecycle hooks (`onBeforeQuery`, `onAfterQuery`, `onBeforeWrite`, `onAfterWrite`) for embedding generation, vector index updates, and analytics.
 - **Cloud backups & migrations** – built-in backup manager with compression, retention policies, and restore helpers plus migration utilities.
 - **Portable packaging** – optional native dependencies; falls back to pure TypeScript/WASM adapters when native modules are unavailable.
 - **Browser-friendly** – Dynamic imports prevent bundlers from including server-only dependencies (`pg`, `path`) in browser builds.
+- **Mobile/Offline Parity** – Same APIs work across desktop, mobile (Capacitor), and browser with automatic sync support.
 - **CI-first design** – Vitest coverage, Codecov integration, and GitHub Actions workflows for linting, testing, releasing, and npm publish/tag automation.
 
 ## Installation
@@ -212,6 +215,105 @@ See [**PLATFORM_STRATEGY.md**](./PLATFORM_STRATEGY.md) for a comprehensive guide
 - Browser-friendly bundling (dynamic imports prevent server-only dependencies from being bundled)
 
 **TL;DR:** Use IndexedDB for web, better-sqlite3 for desktop, capacitor for mobile, Postgres for cloud.
+
+## Performance Tiers & Cost Optimization
+
+The adapter supports configurable performance tiers for different use cases:
+
+```typescript
+import { createDatabase } from '@framers/sql-storage-adapter';
+
+// Development: Fast tier - prioritize speed
+const devDb = await createDatabase({
+  type: 'memory',
+  performance: { tier: 'fast' }
+});
+
+// Production: Balanced tier (default)
+const prodDb = await createDatabase({
+  priority: ['indexeddb', 'sqljs'],
+  performance: { tier: 'balanced' }
+});
+
+// RAG System: Accurate tier - no caching, full validation
+const ragDb = await createDatabase({
+  postgres: { connectionString: process.env.DATABASE_URL },
+  performance: { tier: 'accurate', trackMetrics: true }
+});
+
+// Mobile: Efficient tier - battery optimization
+const mobileDb = await createDatabase({
+  priority: ['capacitor', 'indexeddb'],
+  performance: { tier: 'efficient', batchWrites: true }
+});
+```
+
+| Tier | Caching | Batching | Validation | Use Case |
+|------|---------|----------|------------|----------|
+| `fast` | Aggressive | Yes | Minimal | Development, testing |
+| `balanced` | Moderate | No | Standard | General production |
+| `accurate` | Disabled | No | Full | RAG, analytics |
+| `efficient` | Moderate | Yes | Minimal | Mobile, IoT |
+
+See [**docs/OPTIMIZATION_GUIDE.md**](./docs/OPTIMIZATION_GUIDE.md) for detailed configuration options.
+
+## RAG-Ready Hooks
+
+The adapter provides lifecycle hooks for RAG (Retrieval Augmented Generation) integration:
+
+```typescript
+import { createDatabase, type StorageHooks } from '@framers/sql-storage-adapter';
+
+const ragHooks: StorageHooks = {
+  // Generate embeddings on document insert
+  onBeforeWrite: async (context) => {
+    if (context.statement.includes('INSERT INTO documents')) {
+      const content = context.parameters?.[1] as string;
+      if (content) {
+        const embedding = await generateEmbedding(content);
+        context.metadata = { ...context.metadata, embedding };
+      }
+    }
+    return context;
+  },
+  
+  // Update vector index after insert
+  onAfterWrite: async (context, result) => {
+    if (context.metadata?.embedding && result.lastInsertRowid) {
+      await vectorStore.upsert({
+        id: String(result.lastInsertRowid),
+        embedding: context.metadata.embedding
+      });
+    }
+  },
+  
+  // Log slow queries for optimization
+  onAfterQuery: async (context, result) => {
+    const duration = Date.now() - context.startTime;
+    if (duration > 100) {
+      console.warn(`Slow query (${duration}ms):`, context.statement);
+    }
+    return result;
+  }
+};
+
+const db = await createDatabase({
+  performance: { tier: 'accurate' },
+  hooks: ragHooks
+});
+```
+
+### Available Hooks
+
+| Hook | Trigger | Use Cases |
+|------|---------|-----------|
+| `onBeforeQuery` | Before SELECT/exec | Query transformation, caching, logging |
+| `onAfterQuery` | After successful query | Result transformation, metrics |
+| `onBeforeWrite` | Before INSERT/UPDATE/DELETE | Validation, embedding generation |
+| `onAfterWrite` | After successful write | Cache invalidation, vector indexing |
+| `onError` | On any error | Error transformation, alerting |
+
+See [**docs/OPTIMIZATION_GUIDE.md#rag-integration-points**](./docs/OPTIMIZATION_GUIDE.md#rag-integration-points) for complete examples.
 
 ## CI, Releases, and Badges
 
