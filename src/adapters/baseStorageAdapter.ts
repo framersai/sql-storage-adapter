@@ -137,6 +137,13 @@ export interface BaseAdapterOptions {
    * Useful for RAG integration, logging, analytics, and auditing.
    */
   hooks?: StorageHooks;
+  
+  /**
+   * Validate SQL statements before execution.
+   * Convenience option that overrides performance.validateSql.
+   * @defaultValue true
+   */
+  validateSQL?: boolean;
 }
 
 /**
@@ -248,7 +255,21 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
    */
   constructor(options: BaseAdapterOptions = {}) {
     this.options = options;
-    this.performanceSettings = resolvePerformanceConfig(options.performance);
+    
+    // Resolve performance config, allowing top-level validateSQL to override
+    const perfConfig = options.performance ?? {};
+    const resolvedSettings = resolvePerformanceConfig(perfConfig);
+    
+    // Allow top-level validateSQL to override performance.validateSql
+    if (options.validateSQL !== undefined) {
+      this.performanceSettings = {
+        ...resolvedSettings,
+        validateSql: options.validateSQL,
+      };
+    } else {
+      this.performanceSettings = resolvedSettings;
+    }
+    
     this.hooks = options.hooks ?? {};
   }
 
@@ -372,7 +393,7 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
     
     const startTime = Date.now();
     const operationId = generateOperationId();
-    const cacheKey = this.getCacheKey(statement, parameters);
+    const cacheKey = this.getCacheKey('get', statement, parameters);
     
     // Check cache first
     if (this.performanceSettings.cacheEnabled) {
@@ -457,7 +478,7 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
     
     const startTime = Date.now();
     const operationId = generateOperationId();
-    const cacheKey = this.getCacheKey(statement, parameters);
+    const cacheKey = this.getCacheKey('all', statement, parameters);
     
     // Check cache first
     if (this.performanceSettings.cacheEnabled) {
@@ -790,10 +811,11 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
   
   /**
    * Generates a cache key for a query.
+   * Includes operation type to prevent get/all cache collisions.
    */
-  private getCacheKey(statement: string, parameters?: StorageParameters): string {
+  private getCacheKey(operation: 'get' | 'all', statement: string, parameters?: StorageParameters): string {
     const paramStr = parameters ? JSON.stringify(parameters) : '';
-    return `${statement}::${paramStr}`;
+    return `${operation}::${statement}::${paramStr}`;
   }
   
   /**
