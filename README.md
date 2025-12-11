@@ -255,7 +255,7 @@ const mobileDb = await createDatabase({
 | `accurate` | Disabled | No | Full | Analytics, reporting |
 | `efficient` | Moderate | Yes | Minimal | Mobile, IoT |
 
-See [**docs/OPTIMIZATION_GUIDE.md**](./guides/OPTIMIZATION_GUIDE.md) for detailed configuration options.
+See [**guides/OPTIMIZATION_GUIDE.md**](./guides/OPTIMIZATION_GUIDE.md) for detailed configuration options.
 
 ## Lifecycle Hooks
 
@@ -304,7 +304,7 @@ const db = await createDatabase({
 | `onAfterWrite` | After successful write | Cache invalidation, sync triggers |
 | `onError` | On any error | Error transformation, alerting |
 
-See [**docs/OPTIMIZATION_GUIDE.md**](./guides/OPTIMIZATION_GUIDE.md) for complete configuration options.
+See [**guides/OPTIMIZATION_GUIDE.md**](./guides/OPTIMIZATION_GUIDE.md) for complete configuration options.
 
 ## CI, Releases, and Badges
 
