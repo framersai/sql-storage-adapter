@@ -70,7 +70,7 @@
     "url": "https://github.com/framersai/sql-storage-adapter/issues",
     "email": "team@frame.dev"
   },
-  "homepage": "https://framersai.github.io/sql-storage-adapter",
+  "homepage": "https://framersai.github.io/sql-storage-adapter/",
   "sideEffects": false,
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.709.0",
