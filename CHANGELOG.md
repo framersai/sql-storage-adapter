@@ -1,3 +1,14 @@
+## [0.4.2] - 2025-12-11
+
+### Fixed
+- **better-sqlite3 directory creation**: Adapter now creates parent directories before opening database file (fixes SQLITE_CANTOPEN when directory doesn't exist)
+- **ESLint monorepo conflict**: Added `tsconfigRootDir` to ESLint config to resolve parsing errors in monorepo setups
+- **TypeDoc build**: Moved guide docs from `docs/` to `guides/` to prevent deletion by TypeDoc's `cleanOutputDir`
+- **README logo**: Fixed Frame.dev logo URL (was 404ing due to incorrect path format)
+
+### Added
+- New test file `betterSqliteAdapter.spec.ts` for directory creation tests
+
 ## [0.3.6] - 2025-11-12
 
 ### Fixed

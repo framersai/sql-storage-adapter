@@ -64,6 +64,15 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          VERSION=${{ steps.pkg.outputs.version }}
+          NOTES=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub release
         if: steps.npm_check.outputs.published == 'false'
         uses: ncipollo/release-action@v1
@@ -71,10 +80,5 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: v${{ steps.pkg.outputs.version }}
           name: sql-storage-adapter v${{ steps.pkg.outputs.version }}
-          body: |
-            ## Changes in v${{ steps.pkg.outputs.version }}
-            
-            - Added `validateSQL` option to `BaseAdapterOptions` for convenience
-            - Fixed cache key collision between `get()` and `all()` operations
-            - Constructor now merges top-level `validateSQL` into `performanceSettings.validateSql`
+          body: ${{ steps.changelog.outputs.notes }}
           allowUpdates: true
