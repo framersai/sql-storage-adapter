@@ -145,6 +145,16 @@ export class BetterSqliteAdapter implements StorageAdapter {
     const moduleReference = this.module as BetterSqliteModule & { default?: BetterSqliteModule };
     const DatabaseCtor = moduleReference.default ?? moduleReference;
     const resolvedPath = options?.filePath ?? this.defaultFilePath;
+
+    // Ensure parent directory exists (skip for :memory: and file: URIs)
+    if (resolvedPath !== ':memory:' && !resolvedPath.startsWith('file:')) {
+      const fs = await import('fs');
+      const parentDir = path.dirname(resolvedPath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+    }
+
     const databaseOptions = options?.readOnly ? { readonly: true } : undefined;
     this.db = new DatabaseCtor(resolvedPath, databaseOptions);
   }
