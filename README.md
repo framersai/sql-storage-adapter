@@ -38,7 +38,7 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 - **Auto-detected adapters** – `createDatabase()` inspects environment signals and picks the best backend (native SQLite, PostgreSQL, Capacitor, sql.js, **IndexedDB**, memory, etc.).
 - **Capability-aware API** – consistent CRUD, transactions, batching, and event hooks across adapters with runtime capability introspection.
 - **🆕 IndexedDB** – sql.js + IndexedDB persistence wrapper for browser-native, offline-first web apps (uses sql.js for SQL execution, IndexedDB for storage).
-- **🆕 Performance Tiers** – Configurable `fast`, `balanced`, `accurate`, `efficient` presets for cost/accuracy tradeoffs. See [Optimization Guide](./docs/OPTIMIZATION_GUIDE.md).
+- **🆕 Performance Tiers** – Configurable `fast`, `balanced`, `accurate`, `efficient` presets for cost/accuracy tradeoffs. See [Optimization Guide](./guides/OPTIMIZATION_GUIDE.md).
 - **🆕 Lifecycle Hooks** – Extensible hooks (`onBeforeQuery`, `onAfterQuery`, `onBeforeWrite`, `onAfterWrite`) for logging, analytics, caching, and custom extensions.
 - **Cloud backups & migrations** – built-in backup manager with compression, retention policies, and restore helpers plus migration utilities.
 - **Portable packaging** – optional native dependencies; falls back to pure TypeScript/WASM adapters when native modules are unavailable.
@@ -255,7 +255,7 @@ const mobileDb = await createDatabase({
 | `accurate` | Disabled | No | Full | Analytics, reporting |
 | `efficient` | Moderate | Yes | Minimal | Mobile, IoT |
 
-See [**docs/OPTIMIZATION_GUIDE.md**](./docs/OPTIMIZATION_GUIDE.md) for detailed configuration options.
+See [**docs/OPTIMIZATION_GUIDE.md**](./guides/OPTIMIZATION_GUIDE.md) for detailed configuration options.
 
 ## Lifecycle Hooks
 
@@ -304,7 +304,7 @@ const db = await createDatabase({
 | `onAfterWrite` | After successful write | Cache invalidation, sync triggers |
 | `onError` | On any error | Error transformation, alerting |
 
-See [**docs/OPTIMIZATION_GUIDE.md**](./docs/OPTIMIZATION_GUIDE.md) for complete configuration options.
+See [**docs/OPTIMIZATION_GUIDE.md**](./guides/OPTIMIZATION_GUIDE.md) for complete configuration options.
 
 ## CI, Releases, and Badges
 
