@@ -68,9 +68,7 @@ jobs:
               p {print}
             ' CHANGELOG.md)
             if [ -z "$notes" ]; then
-              notes="## [$VERSION]
-
-Release notes not found."
+              notes=$(printf "## [%s]\n\nRelease notes not found." "$VERSION")
             fi
           else
             notes="Release notes not found in CHANGELOG.md."
