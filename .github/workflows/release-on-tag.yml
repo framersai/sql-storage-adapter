@@ -63,8 +63,8 @@ jobs:
           if [ -f CHANGELOG.md ]; then
             notes=$(awk -v ver="$VERSION" '
               BEGIN{p=0}
-              $0 ~ "^## \\["ver"\\]" {p=1; print; next}
-              p && /^## \\[/{exit}
+              $0 ~ "^## [[]"ver"[]]" {p=1; print; next}
+              p && /^## [[]/{exit}
               p {print}
             ' CHANGELOG.md)
             if [ -z "$notes" ]; then
