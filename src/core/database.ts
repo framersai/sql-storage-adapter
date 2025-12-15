@@ -11,6 +11,7 @@ import type { StorageAdapter } from './contracts';
 import { resolveStorageAdapter, type StorageResolutionOptions, type AdapterKind } from './resolver';
 import type { PostgresAdapterOptions } from '../adapters/postgresAdapter';
 import type { CapacitorAdapterOptions } from '../adapters/capacitorSqliteAdapter';
+import type { IndexedDbAdapterOptions } from '../adapters/indexedDbAdapter';
 
 /**
  * Database connection options.
@@ -39,7 +40,26 @@ export interface DatabaseOptions {
    * Automatically detected on mobile platforms.
    */
   mobile?: CapacitorAdapterOptions;
-  
+
+  /**
+   * IndexedDB configuration for browser-native persistence.
+   * Uses sql.js (WASM) for SQL execution + IndexedDB for storage.
+   *
+   * @example
+   * ```typescript
+   * const db = await createDatabase({
+   *   priority: ['indexeddb', 'sqljs'],
+   *   indexedDb: {
+   *     dbName: 'my-app-db',
+   *     sqlJsConfig: {
+   *       locateFile: (file) => `/wasm/${file}`
+   *     }
+   *   }
+   * });
+   * ```
+   */
+  indexedDb?: IndexedDbAdapterOptions;
+
   /**
    * Force a specific database type.
    * Leave empty to auto-detect.
@@ -125,6 +145,11 @@ export async function createDatabase(options: DatabaseOptions = {}): Promise<Sto
   // Handle mobile config
   if (options.mobile) {
     resolverOptions.capacitor = options.mobile;
+  }
+
+  // Handle IndexedDB config (browser persistence)
+  if (options.indexedDb) {
+    resolverOptions.indexedDb = options.indexedDb;
   }
 
   // Handle explicit type (maps to a canonical adapter kind)

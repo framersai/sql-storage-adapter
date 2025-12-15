@@ -46,7 +46,7 @@ import { createBetterSqliteAdapter } from '../adapters/betterSqliteAdapter';
 import { createSqlJsAdapter } from '../adapters/sqlJsAdapter';
 import { createCapacitorSqliteAdapter, type CapacitorAdapterOptions } from '../adapters/capacitorSqliteAdapter';
 import { createPostgresAdapter } from '../adapters/postgresAdapter';
-import { IndexedDbAdapter } from '../adapters/indexedDbAdapter';
+import { IndexedDbAdapter, type IndexedDbAdapterOptions } from '../adapters/indexedDbAdapter';
 
 // Re-export AdapterKind for external use
 export type { AdapterKind } from './contracts/context';
@@ -60,6 +60,8 @@ export interface StorageResolutionOptions {
   capacitor?: CapacitorAdapterOptions;
   /** Options passed to the Postgres adapter. */
   postgres?: { connectionString?: string };
+  /** Options passed to the IndexedDB adapter (browser persistence). */
+  indexedDb?: IndexedDbAdapterOptions;
   /** Options forwarded to adapter.open. */
   openOptions?: StorageOpenOptions;
 }
@@ -143,10 +145,14 @@ export const resolveStorageAdapter = async (options: StorageResolutionOptions = 
         return {
           name,
           factory: async () => {
-            const adapterOptions = options.openOptions?.adapterOptions as { dbName?: string } | undefined;
+            // Use dedicated indexedDb options, fallback to legacy openOptions.adapterOptions
+            const legacyOptions = options.openOptions?.adapterOptions as { dbName?: string } | undefined;
             return new IndexedDbAdapter({
-              dbName: adapterOptions?.dbName || 'app-db',
-              autoSave: true,
+              dbName: options.indexedDb?.dbName || legacyOptions?.dbName || 'app-db',
+              storeName: options.indexedDb?.storeName,
+              autoSave: options.indexedDb?.autoSave ?? true,
+              saveIntervalMs: options.indexedDb?.saveIntervalMs,
+              sqlJsConfig: options.indexedDb?.sqlJsConfig,
             });
           }
         };
