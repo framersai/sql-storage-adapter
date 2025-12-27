@@ -24,8 +24,8 @@ jobs:
       - name: TypeCheck
         run: npm run typecheck
 
-      - name: Run tests (base adapter tests - no native deps required)
-        run: npx vitest run tests/baseAdapter.spec.ts tests/performance.spec.ts tests/hooks.spec.ts
+      - name: Run tests with coverage
+        run: npx vitest run --coverage
 
       - name: Build
         run: npm run build
