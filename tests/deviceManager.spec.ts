@@ -88,11 +88,15 @@ describe('DeviceManager', () => {
     it('should not re-initialize if already initialized', async () => {
       manager = new DeviceManager({ adapter });
       await manager.initialize();
+
+      // Track how many exec calls after first init
+      const execCallsAfterFirstInit = (adapter.exec as ReturnType<typeof vi.fn>).mock.calls.length;
+
       await manager.initialize();
 
-      // exec should only be called once for table creation
-      const execCalls = (adapter.exec as ReturnType<typeof vi.fn>).mock.calls;
-      expect(execCalls.length).toBe(1);
+      // Re-initializing should not add more exec calls
+      const execCallsAfterSecondInit = (adapter.exec as ReturnType<typeof vi.fn>).mock.calls.length;
+      expect(execCallsAfterSecondInit).toBe(execCallsAfterFirstInit);
     });
 
     it('should emit deviceRegistered event', async () => {
