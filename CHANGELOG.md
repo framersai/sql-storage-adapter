@@ -1,4 +1,4 @@
-## [0.5.0] - 2025-12-26
+## [0.5.1] - 2025-12-26
 
 ### Added
 - **Electron Adapter** - Full-featured Electron support with IPC bridge architecture
@@ -31,6 +31,11 @@
 - Sync protocol messages use underscore naming (`delta_push`, `handshake_response`)
 - Transport layer abstracts WebSocket/HTTP with unified event system
 - Field mergers support custom merge logic for complex data types
+
+## [0.5.0] - 2025-12-14
+
+### Fixed
+- **IndexedDB options**: Exposed `indexedDb` options in `DatabaseOptions` for browser WASM configuration
 
 ## [0.4.2] - 2025-12-11
 

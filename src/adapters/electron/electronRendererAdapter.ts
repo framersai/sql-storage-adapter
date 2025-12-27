@@ -434,7 +434,7 @@ export function createElectronRendererAdapter(
 export function isElectronRenderer(): boolean {
   return typeof window !== 'undefined' &&
          typeof window.process === 'object' &&
-         (window.process as NodeJS.Process)?.type === 'renderer';
+         (window.process as NodeJS.Process & { type?: string })?.type === 'renderer';
 }
 
 /**

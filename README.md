@@ -19,7 +19,7 @@
 
 The SQL Storage Adapter provides a single, ergonomic interface over SQLite (native and WASM), PostgreSQL, Capacitor, IndexedDB, and in-memory stores. It handles adapter discovery, capability detection, and advanced features like cloud backups so you can focus on your application logic.
 
-**🆕 NEW in v0.5.0:** Electron adapter with IPC bridge + Cross-platform real-time sync!
+**🆕 NEW in v0.5.1:** Electron adapter with IPC bridge + Cross-platform real-time sync!
 
 ---
 

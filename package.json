@@ -1,6 +1,6 @@
 {
   "name": "@framers/sql-storage-adapter",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Robust cross-platform SQL storage abstraction with automatic fallbacks and runtime detection",
   "type": "module",
   "main": "dist/index.js",
@@ -89,6 +89,7 @@
   "sideEffects": false,
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.709.0",
+    "electron": "^33.0.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^13.0.0",
     "@semantic-release/git": "^10.0.1",

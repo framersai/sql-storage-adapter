@@ -86,7 +86,7 @@ const isCapacitorRuntime = (): boolean => {
 const isElectronMain = (): boolean => {
   return typeof process !== 'undefined' &&
     Boolean(process.versions?.electron) &&
-    process.type === 'browser';
+    (process as NodeJS.Process & { type?: string }).type === 'browser';
 };
 
 /**
@@ -96,7 +96,7 @@ const isElectronRenderer = (): boolean => {
   return typeof window !== 'undefined' &&
     typeof process !== 'undefined' &&
     Boolean(process.versions?.electron) &&
-    process.type === 'renderer';
+    (process as NodeJS.Process & { type?: string }).type === 'renderer';
 };
 
 interface Candidate {
