@@ -32,8 +32,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run tests (base adapter only - no native deps)
-        run: npx vitest run tests/baseAdapter.spec.ts tests/performance.spec.ts tests/hooks.spec.ts
+      - name: Run tests with coverage
+        run: npx vitest run --coverage
         continue-on-error: false
 
       - name: Build package
