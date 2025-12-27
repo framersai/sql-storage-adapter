@@ -1,3 +1,37 @@
+## [0.5.0] - 2025-12-26
+
+### Added
+- **Electron Adapter** - Full-featured Electron support with IPC bridge architecture
+  - `ElectronMainAdapter`: Main process adapter wrapping better-sqlite3 with WAL, recovery, and multi-window support
+  - `ElectronRendererAdapter`: Renderer process proxy with transparent IPC communication
+  - Preload script with `contextBridge` for secure renderer access
+  - Type-safe IPC protocol with request/response correlation
+  - WAL checkpoint management and corruption detection
+  - Auto-migration system with app version tracking
+  - Multi-window database change broadcasting
+  - Export: `@framers/sql-storage-adapter/electron`
+
+- **Cross-Platform Sync Module** - Real-time delta synchronization across platforms
+  - `CrossPlatformSync`: Main sync orchestrator with configurable table priorities
+  - **Vector Clocks**: Distributed causality tracking for conflict detection
+  - **WebSocket Transport**: Real-time bidirectional sync with auto-reconnection and heartbeats
+  - **HTTP Transport**: Polling fallback for firewalls/proxies that block WebSocket
+  - **Conflict Resolution**: Strategies include `last-write-wins`, `local-wins`, `remote-wins`, `merge`, `manual`
+  - **Device Registry**: Track and manage syncing devices with presence status
+  - **SyncLogManager**: Change log and conflict tables for delta tracking
+  - UI hooks for custom conflict resolution dialogs
+  - Export: `@framers/sql-storage-adapter/sync`
+
+### Changed
+- Updated package exports to include `/electron`, `/electron/preload`, and `/sync` entry points
+- Enhanced `StorageContext` with Electron-specific properties
+
+### Technical Details
+- Vector clocks use `Record<string, number>` for causality comparison
+- Sync protocol messages use underscore naming (`delta_push`, `handshake_response`)
+- Transport layer abstracts WebSocket/HTTP with unified event system
+- Field mergers support custom merge logic for complex data types
+
 ## [0.4.2] - 2025-12-11
 
 ### Fixed

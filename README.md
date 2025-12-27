@@ -19,7 +19,7 @@
 
 The SQL Storage Adapter provides a single, ergonomic interface over SQLite (native and WASM), PostgreSQL, Capacitor, IndexedDB, and in-memory stores. It handles adapter discovery, capability detection, and advanced features like cloud backups so you can focus on your application logic.
 
-**🆕 NEW:** Full IndexedDB support for browser-native, offline-first web apps!
+**🆕 NEW in v0.5.0:** Electron adapter with IPC bridge + Cross-platform real-time sync!
 
 ---
 
@@ -27,6 +27,8 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Adapter Matrix](#adapter-matrix)
+- [Electron Adapter](#electron-adapter)
+- [Cross-Platform Sync](#cross-platform-sync)
 - [Configuration & Resolution](#configuration--resolution)
 - [Platform Strategy](#platform-strategy)
 - [CI, Releases, and Badges](#ci-releases-and-badges)
@@ -38,6 +40,8 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 - **Auto-detected adapters** – `createDatabase()` inspects environment signals and picks the best backend (native SQLite, PostgreSQL, Capacitor, sql.js, **IndexedDB**, memory, etc.).
 - **Capability-aware API** – consistent CRUD, transactions, batching, and event hooks across adapters with runtime capability introspection.
 - **🆕 IndexedDB** – sql.js + IndexedDB persistence wrapper for browser-native, offline-first web apps (uses sql.js for SQL execution, IndexedDB for storage).
+- **🆕 Electron Adapter** – Full IPC bridge with main/renderer process split, WAL management, auto-migrations, multi-window support.
+- **🆕 Cross-Platform Sync** – Real-time delta sync with vector clocks, WebSocket/HTTP transports, conflict resolution UI hooks, and device registry.
 - **🆕 Performance Tiers** – Configurable `fast`, `balanced`, `accurate`, `efficient` presets for cost/accuracy tradeoffs. See [Optimization Guide](./guides/OPTIMIZATION_GUIDE.md).
 - **🆕 Lifecycle Hooks** – Extensible hooks (`onBeforeQuery`, `onAfterQuery`, `onBeforeWrite`, `onAfterWrite`) for logging, analytics, caching, and custom extensions.
 - **Cloud backups & migrations** – built-in backup manager with compression, retention policies, and restore helpers plus migration utilities.
@@ -120,6 +124,7 @@ See [Platform Strategy Guide](./PLATFORM_STRATEGY.md) for detailed pros/cons and
 
 | Adapter | Package | Ideal for | Pros | Considerations |
 | --- | --- | --- | --- | --- |
+| **🆕 `electron`** | bundled | **Electron desktop apps** | IPC bridge, multi-window, WAL, auto-migrations, crash recovery | Requires Electron runtime |
 | **🆕 `indexeddb`** | bundled (sql.js) | **Browsers, PWAs** | sql.js + IndexedDB persistence wrapper, browser-native storage, 50MB-1GB+ quota, offline-first | IndexedDB quotas vary, WASM overhead (sql.js), not a separate SQL engine |
 | `better-sqlite3` | `better-sqlite3` | Node/Electron, CLI, CI | Native performance, transactional semantics, WAL support | Needs native toolchain; version must match Node ABI |
 | `postgres` | `pg` | Hosted or on-prem PostgreSQL | Connection pooling, rich SQL features, cloud friendly | Requires `DATABASE_URL`/credentials |
@@ -132,10 +137,97 @@ See [Platform Strategy Guide](./PLATFORM_STRATEGY.md) for detailed pros/cons and
 | Platform | Primary Adapter | Fallback | Use Case |
 |----------|----------------|----------|----------|
 | **Web (Browser)** | IndexedDB | sql.js | PWAs, offline-first web apps |
-| **Electron (Desktop)** | better-sqlite3 | sql.js | Desktop apps, dev tools |
+| **Electron (Desktop)** | electron | better-sqlite3 | Desktop apps, dev tools |
 | **Capacitor (Mobile)** | capacitor | IndexedDB | iOS/Android native apps |
 | **Node.js** | better-sqlite3 | Postgres, sql.js | CLI tools, local servers |
 | **Cloud (Serverless)** | Postgres | better-sqlite3 | Multi-tenant SaaS, APIs |
+
+## Electron Adapter
+
+The Electron adapter provides a complete IPC bridge architecture for Electron apps with main/renderer process split.
+
+```typescript
+// Main process (main.ts)
+import { createElectronMainAdapter } from '@framers/sql-storage-adapter/electron';
+
+const db = await createElectronMainAdapter({
+  filePath: path.join(app.getPath('userData'), 'app.db'),
+  wal: { enabled: true, checkpointInterval: 30000 },
+  autoMigration: { enabled: true, migrationsPath: './migrations' },
+  multiWindow: { enabled: true, broadcastChanges: true },
+});
+
+await db.open();
+```
+
+```typescript
+// Renderer process
+import { createElectronRendererAdapter } from '@framers/sql-storage-adapter/electron';
+
+const db = createElectronRendererAdapter();
+await db.open();
+
+const users = await db.all('SELECT * FROM users');
+```
+
+**Features:**
+- ✅ Type-safe IPC protocol with request/response correlation
+- ✅ WAL checkpoint management and corruption detection
+- ✅ Auto-migration on app version change
+- ✅ Multi-window database change broadcasting
+- ✅ Preload script with secure `contextBridge` API
+
+## Cross-Platform Sync
+
+Real-time delta synchronization across Electron, Capacitor, browser, and server platforms.
+
+```typescript
+import { createCrossPlatformSync } from '@framers/sql-storage-adapter/sync';
+
+const sync = await createCrossPlatformSync({
+  localAdapter: db,
+  endpoint: 'wss://sync.example.com',
+  authToken: 'bearer-token',
+  device: { name: 'MacBook Pro', type: 'electron' },
+  tables: {
+    notes: { priority: 'high', conflictStrategy: 'merge' },
+    settings: { priority: 'critical', conflictStrategy: 'local-wins' },
+  },
+  hooks: {
+    onConflictNeedsResolution: async (conflict) => {
+      // Show UI for manual conflict resolution
+      return showConflictDialog(conflict);
+    },
+    onSyncComplete: (result) => {
+      console.log(`Synced: ${result.changesPushed} pushed, ${result.changesPulled} pulled`);
+    },
+  },
+});
+
+// Manual sync
+await sync.sync();
+
+// Or enable real-time sync
+await sync.connect();
+```
+
+**Features:**
+- ✅ **Vector Clocks** – Distributed causality tracking for accurate conflict detection
+- ✅ **WebSocket Transport** – Real-time bidirectional sync with auto-reconnection
+- ✅ **HTTP Fallback** – Polling transport for firewalls that block WebSocket
+- ✅ **Conflict Resolution** – Strategies: `last-write-wins`, `local-wins`, `remote-wins`, `merge`, `manual`
+- ✅ **Device Registry** – Track syncing devices with presence status (online/offline/syncing)
+- ✅ **UI Hooks** – Custom conflict resolution dialogs
+
+**Conflict Strategies:**
+
+| Strategy | Description |
+|----------|-------------|
+| `last-write-wins` | Most recent change wins (by timestamp) |
+| `local-wins` | Local changes always take priority |
+| `remote-wins` | Remote changes always take priority |
+| `merge` | Field-level merge with custom mergers |
+| `manual` | Defer to UI hook for user decision |
 
 ## Configuration & Resolution
 

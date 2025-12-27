@@ -17,6 +17,21 @@
       "import": "./dist/types/index.js",
       "default": "./dist/types/index.js"
     },
+    "./electron": {
+      "types": "./dist/adapters/electron/index.d.ts",
+      "import": "./dist/adapters/electron/index.js",
+      "default": "./dist/adapters/electron/index.js"
+    },
+    "./electron/preload": {
+      "types": "./dist/adapters/electron/preload.d.ts",
+      "import": "./dist/adapters/electron/preload.js",
+      "default": "./dist/adapters/electron/preload.js"
+    },
+    "./sync": {
+      "types": "./dist/features/sync/index.d.ts",
+      "import": "./dist/features/sync/index.js",
+      "default": "./dist/features/sync/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -106,6 +121,7 @@
     "@aws-sdk/client-s3": "^3.0.0",
     "@capacitor-community/sqlite": "^6.0.0",
     "better-sqlite3": "^12.0.0",
+    "electron": ">=20.0.0",
     "pg": "^8.13.1"
   },
   "peerDependenciesMeta": {
@@ -116,6 +132,9 @@
       "optional": true
     },
     "better-sqlite3": {
+      "optional": true
+    },
+    "electron": {
       "optional": true
     },
     "pg": {
