@@ -80,6 +80,25 @@ const isCapacitorRuntime = (): boolean => {
   return Boolean(maybeCapacitor?.isNativePlatform?.());
 };
 
+/**
+ * Detect if running in Electron main process.
+ */
+const isElectronMain = (): boolean => {
+  return typeof process !== 'undefined' &&
+    Boolean(process.versions?.electron) &&
+    process.type === 'browser';
+};
+
+/**
+ * Detect if running in Electron renderer process.
+ */
+const isElectronRenderer = (): boolean => {
+  return typeof window !== 'undefined' &&
+    typeof process !== 'undefined' &&
+    Boolean(process.versions?.electron) &&
+    process.type === 'renderer';
+};
+
 interface Candidate {
   name: AdapterKind;
   factory: StorageAdapterFactory;
@@ -102,6 +121,25 @@ export const resolveStorageAdapter = async (options: StorageResolutionOptions = 
     }
     if (envOverride) {
       return [envOverride];
+    }
+    // Electron detection - provide guidance to use dedicated Electron adapters
+    if (isElectronMain()) {
+      console.warn(
+        '[StorageAdapter] Electron main process detected. ' +
+        'Consider using the dedicated Electron adapter for full framework support:\n' +
+        "  import { createElectronMainAdapter } from '@framers/sql-storage-adapter/electron';\n" +
+        'Falling back to better-sqlite3 adapter.'
+      );
+      return ['better-sqlite3'];
+    }
+    if (isElectronRenderer()) {
+      console.warn(
+        '[StorageAdapter] Electron renderer process detected. ' +
+        'For IPC-based database access, use the dedicated Electron adapter:\n' +
+        "  import { createElectronRendererAdapter } from '@framers/sql-storage-adapter/electron';\n" +
+        'Note: Direct database access in renderer is not recommended for security reasons.'
+      );
+      return ['indexeddb', 'sqljs'];
     }
     if (isCapacitorRuntime()) {
       return ['capacitor', 'indexeddb', 'sqljs'];

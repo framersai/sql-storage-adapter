@@ -17,12 +17,20 @@ export type ConnectionType = 'file' | 'memory' | 'network';
 /**
  * Database engine identifier.
  */
-export type DatabaseEngine = 'sqlite' | 'postgres' | 'mysql' | 'sqljs' | 'capacitor' | 'supabase';
+export type DatabaseEngine = 'sqlite' | 'postgres' | 'mysql' | 'sqljs' | 'capacitor' | 'supabase' | 'electron';
 
 /**
  * Adapter identifier used by the resolver.
  */
-export type AdapterKind = 'postgres' | 'better-sqlite3' | 'capacitor' | 'sqljs' | 'indexeddb' | 'supabase';
+export type AdapterKind =
+  | 'postgres'
+  | 'better-sqlite3'
+  | 'capacitor'
+  | 'sqljs'
+  | 'indexeddb'
+  | 'supabase'
+  | 'electron-main'
+  | 'electron-renderer';
 
 /**
  * Information about the current database connection.
