@@ -54,6 +54,37 @@ import type {
 } from '../core/contracts';
 import { normaliseParameters } from '../shared/parameterUtils';
 
+// ============================================================================
+// GLOBAL SQL.JS SINGLETON
+// ============================================================================
+// Prevents race conditions when multiple IndexedDbAdapter instances initialize
+// simultaneously by ensuring sql.js WASM is loaded only once.
+
+let globalSQL: SqlJsStatic | null = null;
+let globalSQLPromise: Promise<SqlJsStatic> | null = null;
+
+/**
+ * Get or initialize the global sql.js instance.
+ * Uses a singleton pattern to prevent race conditions when multiple
+ * adapters initialize simultaneously.
+ */
+async function getGlobalSQL(config?: Parameters<typeof initSqlJs>[0]): Promise<SqlJsStatic> {
+  if (globalSQL) {
+    return globalSQL;
+  }
+
+  if (globalSQLPromise) {
+    return globalSQLPromise;
+  }
+
+  globalSQLPromise = initSqlJs(config).then((sql) => {
+    globalSQL = sql;
+    return sql;
+  });
+
+  return globalSQLPromise;
+}
+
 /**
  * Configuration for IndexedDB adapter.
  */
@@ -170,17 +201,21 @@ export class IndexedDbAdapter implements StorageAdapter {
   /**
    * Opens IndexedDB and initializes sql.js database.
    * Loads existing database from IndexedDB if present.
+   *
+   * Uses a global sql.js singleton to prevent race conditions when
+   * multiple adapters (e.g., fabric_codex_db and quarry-codex-local)
+   * are initialized simultaneously.
    */
   public async open(_options?: StorageOpenOptions): Promise<void> {
     if (this.db) {
       return; // Already open
     }
 
-    // Initialize sql.js
-    this.SQL = await initSqlJs(this.sqlJsConfig);
+    // Initialize sql.js using global singleton (prevents race conditions)
+    this.SQL = await getGlobalSQL(this.sqlJsConfig);
 
-    // Open IndexedDB
-    this.idb = await this.openIndexedDb();
+    // Open IndexedDB with retry logic for race conditions
+    this.idb = await this.openIndexedDbWithRetry();
 
     // Load existing database from IndexedDB or create new
     const existingData = await this.loadFromIndexedDb();
@@ -383,17 +418,62 @@ export class IndexedDbAdapter implements StorageAdapter {
   private openIndexedDb(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(this.dbName, DB_VERSION);
-      
+
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(this.storeName)) {
           db.createObjectStore(this.storeName);
         }
       };
-      
+
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
+  }
+
+  /**
+   * Opens IndexedDB with retry logic and exponential backoff.
+   * Handles race conditions when multiple adapters initialize simultaneously.
+   *
+   * The "NotFoundError" for object stores typically occurs when:
+   * 1. Two adapters try to open/upgrade simultaneously
+   * 2. One adapter opens the DB while another is still upgrading
+   * 3. Schema version mismatch during concurrent initialization
+   *
+   * @param maxRetries Maximum number of retry attempts (default: 3)
+   * @param baseDelayMs Base delay in milliseconds (default: 100)
+   */
+  private async openIndexedDbWithRetry(maxRetries = 3, baseDelayMs = 100): Promise<IDBDatabase> {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.openIndexedDb();
+      } catch (error) {
+        lastError = error;
+
+        // Check if this is a retryable error
+        const isNotFoundError = error instanceof DOMException && error.name === 'NotFoundError';
+        const isVersionError = error instanceof DOMException && error.name === 'VersionError';
+        const isRetryable = isNotFoundError || isVersionError;
+
+        if (!isRetryable || attempt === maxRetries) {
+          break;
+        }
+
+        // Exponential backoff: 100ms, 200ms, 400ms, ...
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        console.warn(
+          `[IndexedDbAdapter] Retrying IndexedDB open for "${this.dbName}" ` +
+          `(attempt ${attempt + 1}/${maxRetries + 1}, delay: ${delay}ms)`,
+          error
+        );
+
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    throw lastError;
   }
 
   /**
@@ -403,13 +483,15 @@ export class IndexedDbAdapter implements StorageAdapter {
   private async loadFromIndexedDb(): Promise<Uint8Array | null> {
     if (!this.idb) return null;
 
-    return new Promise((resolve, reject) => {
-      const tx = this.idb!.transaction(this.storeName, 'readonly');
-      const store = tx.objectStore(this.storeName);
-      const req = store.get('db');
+    return this.withTransactionRetry(async () => {
+      return new Promise((resolve, reject) => {
+        const tx = this.idb!.transaction(this.storeName, 'readonly');
+        const store = tx.objectStore(this.storeName);
+        const req = store.get('db');
 
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(req.error);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
     });
   }
 
@@ -421,17 +503,64 @@ export class IndexedDbAdapter implements StorageAdapter {
 
     const data = this.db.export();
 
-    return new Promise((resolve, reject) => {
-      const tx = this.idb!.transaction(this.storeName, 'readwrite');
-      const store = tx.objectStore(this.storeName);
-      const req = store.put(data, 'db');
+    return this.withTransactionRetry(async () => {
+      return new Promise((resolve, reject) => {
+        const tx = this.idb!.transaction(this.storeName, 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        const req = store.put(data, 'db');
 
-      req.onsuccess = () => {
-        this.dirty = false;
-        resolve();
-      };
-      req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          this.dirty = false;
+          resolve();
+        };
+        req.onerror = () => reject(req.error);
+      });
     });
+  }
+
+  /**
+   * Wraps a transaction operation with retry logic.
+   * Handles "NotFoundError" by reopening IndexedDB connection.
+   */
+  private async withTransactionRetry<T>(
+    operation: () => Promise<T>,
+    maxRetries = 2
+  ): Promise<T> {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+
+        // Check if this is a "store not found" error that can be fixed by reopening
+        const isNotFoundError = error instanceof DOMException && error.name === 'NotFoundError';
+
+        if (!isNotFoundError || attempt === maxRetries) {
+          break;
+        }
+
+        // Try to reopen the IndexedDB connection
+        console.warn(
+          `[IndexedDbAdapter] Transaction failed for "${this.dbName}", ` +
+          `reopening connection (attempt ${attempt + 1}/${maxRetries + 1})`,
+          error
+        );
+
+        try {
+          if (this.idb) {
+            this.idb.close();
+          }
+          this.idb = await this.openIndexedDbWithRetry();
+        } catch (reopenError) {
+          console.error('[IndexedDbAdapter] Failed to reopen IndexedDB:', reopenError);
+          throw lastError; // Throw original error
+        }
+      }
+    }
+
+    throw lastError;
   }
 
   /**
