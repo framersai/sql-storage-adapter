@@ -7,6 +7,23 @@ import { normaliseParameters } from '../shared/parameterUtils';
 
 type SqlJsAdapterOptions = SqlJsConfig;
 
+const expandNamedParameters = (named: Record<string, unknown>): Record<string, unknown> => {
+  const expanded: Record<string, unknown> = { ...named };
+  for (const [rawKey, value] of Object.entries(named)) {
+    if (!rawKey) continue;
+    const key = rawKey.replace(/^[:@$]/, '');
+    if (!key) continue;
+    // sql.js expects keys to match the placeholder format (":id", "@id", "$id").
+    // Other adapters (better-sqlite3) accept bare keys ("id") for "@id" placeholders.
+    // Expand all variants so the same query payload works across adapters.
+    if (!(key in expanded)) expanded[key] = value;
+    if (!(`:${key}` in expanded)) expanded[`:${key}`] = value;
+    if (!(`@${key}` in expanded)) expanded[`@${key}`] = value;
+    if (!(`$${key}` in expanded)) expanded[`$${key}`] = value;
+  }
+  return expanded;
+};
+
 const normaliseRowId = (value: unknown): string | number | null => {
   if (typeof value === 'number' || typeof value === 'string') {
     return value;
@@ -65,7 +82,7 @@ export class SqlJsAdapter implements StorageAdapter {
     try {
       const { named, positional } = normaliseParameters(parameters);
       if (named) {
-        stmt.bind(named);
+        stmt.bind(expandNamedParameters(named));
       } else if (positional) {
         stmt.bind(positional);
       }
@@ -92,7 +109,7 @@ export class SqlJsAdapter implements StorageAdapter {
     try {
       const { named, positional } = normaliseParameters(parameters);
       if (named) {
-        stmt.bind(named);
+        stmt.bind(expandNamedParameters(named));
       } else if (positional) {
         stmt.bind(positional);
       }
