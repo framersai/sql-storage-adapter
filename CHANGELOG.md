@@ -1,3 +1,8 @@
+## [0.5.2] - 2026-02-06
+
+### Added
+- `ensureColumnExists` helper for SQLite schema migrations — safely adds columns to existing tables without failing if the column already exists
+
 ## [0.5.1] - 2025-12-26
 
 ### Added
