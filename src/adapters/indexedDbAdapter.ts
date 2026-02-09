@@ -77,7 +77,7 @@ async function getGlobalSQL(config?: Parameters<typeof initSqlJs>[0]): Promise<S
     return globalSQLPromise;
   }
 
-  globalSQLPromise = initSqlJs(config).then((sql) => {
+  globalSQLPromise = initSqlJs(config).then((sql: SqlJsStatic) => {
     globalSQL = sql;
     return sql;
   });
@@ -614,4 +614,3 @@ export class IndexedDbAdapter implements StorageAdapter {
     return this.db!.prepare(statement);
   }
 }
-
