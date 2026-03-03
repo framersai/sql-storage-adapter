@@ -64,6 +64,8 @@ export interface StorageResolutionOptions {
   indexedDb?: IndexedDbAdapterOptions;
   /** Options forwarded to adapter.open. */
   openOptions?: StorageOpenOptions;
+  /** Suppress fallback chain logs (adapter not-found warnings). Default: false. */
+  quiet?: boolean;
 }
 
 interface CapacitorGlobal {
@@ -205,6 +207,7 @@ export const resolveStorageAdapter = async (options: StorageResolutionOptions = 
   });
 
   const errors: unknown[] = [];
+  const quiet = options.quiet === true;
 
   for (const candidate of candidates) {
     try {
@@ -214,10 +217,13 @@ export const resolveStorageAdapter = async (options: StorageResolutionOptions = 
         ...options.openOptions,
       };
       await adapter.open(openOptions);
-      console.info(`[StorageAdapter] Using adapter "${candidate.name}".`);
+      if (!quiet) console.info(`[StorageAdapter] Using adapter "${candidate.name}".`);
       return adapter;
     } catch (error) {
-      console.warn(`[StorageAdapter] Failed to initialise adapter "${candidate.name}".`, error);
+      if (!quiet) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.warn(`[StorageAdapter] ${candidate.name} not available, trying next. ${msg}`);
+      }
       errors.push(error);
       continue;
     }

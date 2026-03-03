@@ -49,7 +49,7 @@ const loadBetterSqlite = async (): Promise<BetterSqliteModule | null> => {
       const require = createRequire(path.join(process.cwd(), 'noop.js'));
       return require('better-sqlite3') as unknown as BetterSqliteModule;
     } catch (error) {
-      console.warn('[StorageAdapter] better-sqlite3 module not available.', error);
+      // Intentionally silent — the resolver handles fallback logging.
       return null;
     }
   }
