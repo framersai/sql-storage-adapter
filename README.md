@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://frame.dev" target="_blank" rel="noopener">
-    <img src="https://raw.githubusercontent.com/framersai/sql-storage-adapter/master/logos/frame-square-black-1024x1024-transparent.png" alt="Frame.dev" width="120">
+    <img src="https://raw.githubusercontent.com/manicinc/voice-chat-assistant/master/logos/frame-square-black-1024x1024-transparent.png" alt="Frame.dev" width="120">
   </a>
   <br>
 </p>
