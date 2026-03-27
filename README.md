@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://frame.dev" target="_blank" rel="noopener">
-    <img src="https://raw.githubusercontent.com/manicinc/voice-chat-assistant/master/logos/frame-square-black-1024x1024-transparent.png" alt="Frame.dev" width="120">
+    <img src="https://raw.githubusercontent.com/framersai/sql-storage-adapter/master/logos/frame-square-black-1024x1024-transparent.png" alt="Frame.dev" width="120">
   </a>
   <br>
 </p>
@@ -19,7 +19,7 @@
 
 The SQL Storage Adapter provides a single, ergonomic interface over SQLite (native and WASM), PostgreSQL, Capacitor, IndexedDB, and in-memory stores. It handles adapter discovery, capability detection, and advanced features like cloud backups so you can focus on your application logic.
 
-**🆕 NEW in v0.5.1:** Electron adapter with IPC bridge + Cross-platform real-time sync!
+**🆕 NEW in v0.6.0:** SQL Dialect abstractions for SQLite/Postgres parity + Cross-platform BLOB codec + Full-text search interface!
 
 ---
 
@@ -31,6 +31,7 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 - [Cross-Platform Sync](#cross-platform-sync)
 - [Configuration & Resolution](#configuration--resolution)
 - [Platform Strategy](#platform-strategy)
+- [SQL Dialect & Feature Abstractions](#sql-dialect--feature-abstractions)
 - [CI, Releases, and Badges](#ci-releases-and-badges)
 - [Contributing](#contributing)
 - [License](#license)
@@ -48,6 +49,10 @@ The SQL Storage Adapter provides a single, ergonomic interface over SQLite (nati
 - **Portable packaging** – optional native dependencies; falls back to pure TypeScript/WASM adapters when native modules are unavailable.
 - **Browser-friendly** – Dynamic imports prevent bundlers from including server-only dependencies (`pg`, `path`) in browser builds.
 - **Mobile/Offline Parity** – Same APIs work across desktop, mobile (Capacitor), and browser with automatic sync support.
+- **🆕 SQL Dialect** – Write cross-platform SQL with `SqlDialect` interface. Automatically translates `INSERT OR IGNORE`, `json_extract`, `ifnull`, `PRAGMA` between SQLite and PostgreSQL.
+- **🆕 Full-Text Search** – `IFullTextSearch` interface abstracts FTS5 (SQLite) and tsvector/GIN (PostgreSQL) with unified `createIndex`, `matchClause`, `rankExpression`, and `rebuildCommand` APIs.
+- **🆕 BLOB Codec** – `IBlobCodec` for cross-platform binary vector storage. `NodeBlobCodec` (Buffer) for server, `BrowserBlobCodec` (DataView) for web.
+- **🆕 Database Export** – `IDatabaseExporter` with `SqliteFileExporter` (VACUUM INTO) and `PostgresExporter` (pg_dump).
 - **CI-first design** – Vitest coverage, Codecov integration, and GitHub Actions workflows for linting, testing, releasing, and npm publish/tag automation.
 
 ## Installation
@@ -397,6 +402,99 @@ const db = await createDatabase({
 | `onError` | On any error | Error transformation, alerting |
 
 See [**guides/OPTIMIZATION_GUIDE.md**](./guides/OPTIMIZATION_GUIDE.md) for complete configuration options.
+
+## SQL Dialect & Feature Abstractions
+
+Write cross-platform SQL that works on both SQLite and PostgreSQL without changing your application code.
+
+### StorageFeatures Factory
+
+```typescript
+import { resolveStorageAdapter, createStorageFeatures } from '@framers/sql-storage-adapter';
+
+const adapter = await resolveStorageAdapter({ filePath: './app.db' });
+const features = createStorageFeatures(adapter);
+// features.dialect  → SqliteDialect or PostgresDialect
+// features.fts      → SqliteFts5 or PostgresFts
+// features.blobCodec → NodeBlobCodec or BrowserBlobCodec
+// features.exporter → SqliteFileExporter or PostgresExporter
+```
+
+### SqlDialect — Cross-Platform SQL
+
+```typescript
+const { dialect } = features;
+
+// INSERT OR IGNORE (SQLite) → ON CONFLICT DO NOTHING (Postgres)
+const sql = dialect.insertOrIgnore('users', ['id', 'name'], ['?', '?']);
+
+// INSERT OR REPLACE (SQLite) → ON CONFLICT DO UPDATE (Postgres)
+const upsert = dialect.insertOrReplace('users', ['id', 'name'], ['?', '?'], 'id');
+
+// json_extract(col, '$.key') (SQLite) → (col::jsonb)->>'key' (Postgres)
+const expr = dialect.jsonExtract('metadata', '$.theme');
+
+// ifnull(expr, fallback) (SQLite) → COALESCE(expr, fallback) (Postgres)
+const safe = dialect.ifnull(dialect.jsonExtract('config', '$.lang'), "'en'");
+
+// PRAGMA (SQLite) → null/no-op (Postgres)
+const pragma = dialect.pragma('journal_mode', 'WAL');
+if (pragma) await adapter.exec(pragma);
+```
+
+### IFullTextSearch — FTS5 & tsvector
+
+```typescript
+const { fts } = features;
+
+// Create index: FTS5 virtual table (SQLite) or tsvector + GIN (Postgres)
+await adapter.exec(fts.createIndex({
+  table: 'docs_fts',
+  columns: ['title', 'body'],
+  contentTable: 'documents',
+  tokenizer: 'porter ascii',
+}));
+
+// Search query
+const sql = `
+  SELECT t.*
+  FROM ${fts.joinClause('documents', 't', 'fts', 'docs_fts')}
+  WHERE ${fts.matchClause('docs_fts', '?')}
+  ORDER BY ${fts.rankExpression('fts')}
+`;
+
+// Rebuild index
+await adapter.exec(fts.rebuildCommand('docs_fts'));
+```
+
+### IBlobCodec — Cross-Platform Binary Encoding
+
+```typescript
+const { blobCodec } = features;
+
+// Encode a float vector for storage
+const blob = blobCodec.encode([0.1, 0.2, -0.5, 1.0]);
+await adapter.run('INSERT INTO embeddings (vec) VALUES (?)', [blob]);
+
+// Decode a stored vector
+const row = await adapter.get<{ vec: Uint8Array }>('SELECT vec FROM embeddings WHERE id = ?', [id]);
+const vector = blobCodec.decode(row!.vec);
+
+// Cross-platform SHA-256
+const hash = await blobCodec.sha256('content to hash');
+```
+
+### IDatabaseExporter — Portable Backups
+
+```typescript
+const { exporter } = features;
+
+// Export to file (VACUUM INTO on SQLite, pg_dump on Postgres)
+await exporter.exportToFile('/backups/snapshot.db');
+
+// Export to bytes (for browser download or cloud upload)
+const bytes = await exporter.exportToBytes();
+```
 
 ## CI, Releases, and Badges
 

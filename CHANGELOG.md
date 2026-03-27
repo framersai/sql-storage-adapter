@@ -1,3 +1,13 @@
+## [0.6.0] - 2026-03-27
+
+### Added
+- **SqlDialect interface** with `SqliteDialect` and `PostgresDialect` implementations for cross-platform SQL generation (`insertOrIgnore`, `insertOrReplace`, `jsonExtract`, `ifnull`, `autoIncrementPrimaryKey`, `pragma`, `placeholder`)
+- **IFullTextSearch interface** with `SqliteFts5` (FTS5 virtual tables) and `PostgresFts` (tsvector/GIN) implementations for cross-platform full-text search (`createIndex`, `matchClause`, `rankExpression`, `rebuildCommand`, `syncInsert`, `sanitizeQuery`, `joinClause`)
+- **IBlobCodec interface** with `NodeBlobCodec` (Buffer) and `BrowserBlobCodec` (DataView/Uint8Array) implementations for cross-platform binary vector encoding
+- **IDatabaseExporter interface** with `SqliteFileExporter` (VACUUM INTO) and `PostgresExporter` (pg_dump) implementations
+- **`createStorageFeatures(adapter)`** factory function that returns the correct `StorageFeatures` bundle based on adapter kind and runtime environment
+- **Postgres dialect integration test** (skipped without `DATABASE_URL`)
+
 ## [0.5.2] - 2026-02-06
 
 ### Added

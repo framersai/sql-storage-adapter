@@ -620,6 +620,64 @@ const db = await getDB(user.id);
 await db.run('INSERT INTO posts (user_id, content) VALUES (?, ?)', [user.id, content]);
 ```
 
+## Feature Abstractions Layer
+
+The `StorageFeatures` bundle provides platform-aware implementations of database features that differ between SQLite and PostgreSQL.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│              Application Code               │
+│  (uses dialect, fts, blobCodec, exporter)   │
+├─────────────────────────────────────────────┤
+│          createStorageFeatures()             │
+│  Inspects adapter.kind + runtime env        │
+├──────────────────┬──────────────────────────┤
+│   SQLite Path    │    PostgreSQL Path       │
+│  SqliteDialect   │   PostgresDialect        │
+│  SqliteFts5      │   PostgresFts            │
+│  NodeBlobCodec   │   NodeBlobCodec          │
+│  SqliteExporter  │   PostgresExporter       │
+├──────────────────┴──────────────────────────┤
+│            StorageAdapter                   │
+│  (run, get, all, exec, transaction, close)  │
+└─────────────────────────────────────────────┘
+```
+
+### Contracts
+
+| Interface | Purpose | Implementations |
+|-----------|---------|----------------|
+| `SqlDialect` | SQL syntax differences (INSERT OR IGNORE vs ON CONFLICT, json_extract vs jsonb, etc.) | `SqliteDialect`, `PostgresDialect` |
+| `IFullTextSearch` | Full-text search DDL and query generation | `SqliteFts5` (FTS5), `PostgresFts` (tsvector/GIN) |
+| `IBlobCodec` | Binary vector encoding/decoding + SHA-256 | `NodeBlobCodec` (Buffer), `BrowserBlobCodec` (DataView) |
+| `IDatabaseExporter` | Database backup/export | `SqliteFileExporter` (VACUUM INTO), `PostgresExporter` (pg_dump) |
+
+### File Layout
+
+```
+src/
+  core/contracts/
+    dialect.ts          # SqlDialect interface
+    fts.ts              # IFullTextSearch interface
+    blobCodec.ts        # IBlobCodec interface
+    exporter.ts         # IDatabaseExporter interface
+    features.ts         # StorageFeatures type + createStorageFeatures factory
+  dialects/
+    SqliteDialect.ts
+    PostgresDialect.ts
+  fts/
+    SqliteFts5.ts
+    PostgresFts.ts
+  codecs/
+    NodeBlobCodec.ts
+    BrowserBlobCodec.ts
+  exporters/
+    SqliteFileExporter.ts
+    PostgresExporter.ts
+```
+
 ---
 
 For more examples and patterns, see the [GitHub repository](https://github.com/framersai/sql-storage-adapter).
