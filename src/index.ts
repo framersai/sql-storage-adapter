@@ -31,3 +31,14 @@ export * from './features/sync/syncManager';
 
 // Shared utilities -----------------------------------------------------------
 export * from './shared/parameterUtils';
+
+// Dialect & feature abstractions -----------------------------------------------
+export { SqliteDialect } from './dialects/SqliteDialect';
+export { PostgresDialect } from './dialects/PostgresDialect';
+export { SqliteFts5 } from './fts/SqliteFts5';
+export { PostgresFts } from './fts/PostgresFts';
+export { NodeBlobCodec } from './codecs/NodeBlobCodec';
+export { BrowserBlobCodec } from './codecs/BrowserBlobCodec';
+export { SqliteFileExporter } from './exporters/SqliteFileExporter';
+export { PostgresExporter } from './exporters/PostgresExporter';
+export { createStorageFeatures } from './core/contracts/features';

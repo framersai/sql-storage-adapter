@@ -283,3 +283,11 @@ export * from './performance';
  */
 export * from './hooks';
 
+// Dialect & feature contracts --------------------------------------------------
+export type { SqlDialect } from './dialect.js';
+export type { IFullTextSearch } from './fts.js';
+export type { IBlobCodec } from './blobCodec.js';
+export type { IDatabaseExporter } from './exporter.js';
+export type { StorageFeatures } from './features.js';
+export { createStorageFeatures } from './features.js';
+
