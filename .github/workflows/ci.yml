@@ -24,8 +24,18 @@ jobs:
       - name: TypeCheck
         run: npm run typecheck
 
+      - name: Run tests
+        run: npx vitest run
+
       - name: Run tests with coverage
         run: npx vitest run --coverage
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
       - name: Build
         run: npm run build
