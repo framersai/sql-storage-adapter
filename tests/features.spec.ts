@@ -9,7 +9,7 @@ import { SqliteFileExporter } from '../src/exporters/SqliteFileExporter.js';
 import { PostgresExporter } from '../src/exporters/PostgresExporter.js';
 import type { StorageAdapter } from '../src/core/contracts/index.js';
 
-function mockAdapter(kind: string): StorageAdapter {
+function mockAdapter(kind: string, extra: Record<string, unknown> = {}): StorageAdapter {
   return {
     kind,
     capabilities: new Set(),
@@ -20,6 +20,7 @@ function mockAdapter(kind: string): StorageAdapter {
     exec: async () => {},
     transaction: async (fn) => fn({} as StorageAdapter),
     close: async () => {},
+    ...extra,
   } as StorageAdapter;
 }
 
@@ -39,9 +40,15 @@ describe('createStorageFeatures', () => {
   });
 
   it('returns PostgresDialect + PostgresFts for postgres adapter', () => {
-    const features = createStorageFeatures(mockAdapter('postgres'));
+    const features = createStorageFeatures(
+      mockAdapter('postgres', {
+        options: { connectionString: 'postgresql://user:pass@localhost:5432/testdb' },
+      }),
+    );
     expect(features.dialect).toBeInstanceOf(PostgresDialect);
     expect(features.fts).toBeInstanceOf(PostgresFts);
     expect(features.exporter).toBeInstanceOf(PostgresExporter);
+    expect((features.exporter as PostgresExporter & { connectionString?: string })['connectionString'])
+      .toBe('postgresql://user:pass@localhost:5432/testdb');
   });
 });

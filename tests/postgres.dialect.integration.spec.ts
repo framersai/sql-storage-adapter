@@ -170,6 +170,24 @@ describeIf('Postgres dialect integration', () => {
     expect(rows.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('fts.syncInsert updates the tsvector column for newly inserted rows', async () => {
+    await adapter.run(
+      'INSERT INTO test_memory_traces (id, content, tags) VALUES ($1, $2, $3)',
+      ['t7', 'event sourcing and domain events', '["ddd"]'],
+    );
+
+    await adapter.run(
+      features.fts.syncInsert('test_memory_traces_fts', '$1', ['content', 'tags']),
+      ['t7', 'event sourcing and domain events', '["ddd"]'],
+    );
+
+    const rows = await adapter.all<{ id: string }>(
+      `SELECT id FROM test_memory_traces WHERE ${features.fts.matchClause('test_memory_traces_fts', '$1')}`,
+      ['event sourcing'],
+    );
+    expect(rows.some((row) => row.id === 't7')).toBe(true);
+  });
+
   it('blobCodec roundtrip works', async () => {
     const testVec = [0.1, 0.2, -0.5, 1.0];
     const encoded = features.blobCodec.encode(testVec);

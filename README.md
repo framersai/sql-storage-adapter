@@ -496,6 +496,8 @@ await exporter.exportToFile('/backups/snapshot.db');
 const bytes = await exporter.exportToBytes();
 ```
 
+On Postgres, `features.exporter` requires a Node runtime plus an adapter that was created with a connection string in `adapter.options.connectionString`, since `pg_dump` runs out-of-process.
+
 ## CI, Releases, and Badges
 
 - GitHub Actions workflows:

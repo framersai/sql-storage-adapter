@@ -11,6 +11,7 @@ export class PostgresFts implements IFullTextSearch {
   /** The content table is stored during createIndex for use by other methods. */
   private _contentTable = '';
   private _columns: string[] = [];
+  private _lang = 'english';
 
   createIndex(config: { table: string; columns: string[]; contentTable?: string; tokenizer?: string }): string {
     const ct = config.contentTable ?? config.table;
@@ -18,6 +19,7 @@ export class PostgresFts implements IFullTextSearch {
     this._columns = config.columns;
     const colConcat = config.columns.map((c) => `COALESCE(${c}, '')`).join(" || ' ' || ");
     const lang = this._tokenizerToLang(config.tokenizer);
+    this._lang = lang;
 
     return [
       `ALTER TABLE ${ct} ADD COLUMN IF NOT EXISTS _tsv tsvector`,
@@ -27,24 +29,26 @@ export class PostgresFts implements IFullTextSearch {
   }
 
   matchClause(_indexName: string, queryPlaceholder: string): string {
-    return `_tsv @@ plainto_tsquery('english', ${queryPlaceholder})`;
+    return `_tsv @@ plainto_tsquery('${this._lang}', ${queryPlaceholder})`;
   }
 
   rankExpression(_indexName: string, queryPlaceholder?: string): string {
     const qp = queryPlaceholder ?? '$1';
-    return `ts_rank(_tsv, plainto_tsquery('english', ${qp}))`;
+    return `ts_rank(_tsv, plainto_tsquery('${this._lang}', ${qp}))`;
   }
 
   rebuildCommand(_indexName: string): string {
     const ct = this._contentTable;
     const colConcat = this._columns.map((c) => `COALESCE(${c}, '')`).join(" || ' ' || ");
-    return `UPDATE ${ct} SET _tsv = to_tsvector('english', ${colConcat})`;
+    return `UPDATE ${ct} SET _tsv = to_tsvector('${this._lang}', ${colConcat})`;
   }
 
-  syncInsert(_indexName: string, rowIdExpr: string, columns: string[]): string {
+  syncInsert(_indexName: string, _rowIdExpr: string, columns: string[]): string {
     const ct = this._contentTable;
-    const colConcat = columns.map((c) => `COALESCE(${c}, '')`).join(" || ' ' || ");
-    return `UPDATE ${ct} SET _tsv = to_tsvector('english', ${colConcat}) WHERE rowid = ${rowIdExpr}`;
+    const colConcat = columns
+      .map((_, index) => `COALESCE($${index + 2}, '')`)
+      .join(" || ' ' || ");
+    return `UPDATE ${ct} SET _tsv = to_tsvector('${this._lang}', ${colConcat}) WHERE id = $1`;
   }
 
   sanitizeQuery(input: string): string {

@@ -12,6 +12,31 @@ import { BrowserBlobCodec } from '../../codecs/BrowserBlobCodec.js';
 import { SqliteFileExporter } from '../../exporters/SqliteFileExporter.js';
 import { PostgresExporter } from '../../exporters/PostgresExporter.js';
 
+interface PostgresAdapterOptionsLike {
+  connectionString?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+  password?: string;
+  ssl?: boolean | object;
+}
+
+function extractPostgresConnectionString(adapter: StorageAdapter): string | undefined {
+  const options = (adapter as StorageAdapter & { options?: PostgresAdapterOptionsLike }).options;
+  if (!options) return undefined;
+  if (options.connectionString) return options.connectionString;
+  if (!options.database) return undefined;
+
+  const host = options.host ?? 'localhost';
+  const port = options.port ?? 5432;
+  const user = options.user ? encodeURIComponent(options.user) : '';
+  const password = options.password ? `:${encodeURIComponent(options.password)}` : '';
+  const auth = user ? `${user}${password}@` : '';
+  const sslQuery = options.ssl ? '?sslmode=require' : '';
+  return `postgresql://${auth}${host}:${port}/${options.database}${sslQuery}`;
+}
+
 /**
  * Bundle of platform-aware database features.
  *
@@ -34,11 +59,14 @@ export interface StorageFeatures {
 export function createStorageFeatures(adapter: StorageAdapter): StorageFeatures {
   const isPostgres = adapter.kind === 'postgres';
   const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
+  const postgresConnectionString = isPostgres ? extractPostgresConnectionString(adapter) : undefined;
 
   return {
     dialect: isPostgres ? new PostgresDialect() : new SqliteDialect(),
     fts: isPostgres ? new PostgresFts() : new SqliteFts5(),
     blobCodec: isBrowser ? new BrowserBlobCodec() : new NodeBlobCodec(),
-    exporter: isPostgres ? new PostgresExporter() : new SqliteFileExporter(adapter),
+    exporter: isPostgres
+      ? new PostgresExporter(postgresConnectionString)
+      : new SqliteFileExporter(adapter),
   };
 }

@@ -61,9 +61,11 @@ describe('PostgresFts', () => {
       table: 'memory_traces_fts',
       columns: ['content', 'tags'],
       contentTable: 'memory_traces',
+      tokenizer: 'simple',
     });
     expect(ddl).toContain('ADD COLUMN IF NOT EXISTS _tsv tsvector');
     expect(ddl).toContain('USING GIN');
+    expect(ddl).toContain("to_tsvector('simple'");
   });
 
   it('matchClause generates @@ expression', () => {
@@ -75,6 +77,20 @@ describe('PostgresFts', () => {
   it('rankExpression generates ts_rank', () => {
     const expr = fts.rankExpression('memory_traces_fts', '$1');
     expect(expr).toContain('ts_rank');
+  });
+
+  it('syncInsert updates by id using bound values instead of rowid', () => {
+    fts.createIndex({
+      table: 'memory_traces_fts',
+      columns: ['content', 'tags'],
+      contentTable: 'memory_traces',
+      tokenizer: 'simple',
+    });
+    const sql = fts.syncInsert('memory_traces_fts', '?', ['content', 'tags']);
+    expect(sql).toContain('WHERE id = $1');
+    expect(sql).toContain("COALESCE($2, '')");
+    expect(sql).toContain("COALESCE($3, '')");
+    expect(sql).toContain("to_tsvector('simple'");
   });
 
   it('rebuildCommand generates UPDATE with to_tsvector', () => {
