@@ -130,7 +130,7 @@ export class SqlJsAdapter implements StorageAdapter {
 
   public async exec(script: string): Promise<void> {
     this.ensureOpen();
-    this.db!.run(script);
+    this.db!.exec(script);
     await this.persistIfNeeded();
   }
 
@@ -139,11 +139,29 @@ export class SqlJsAdapter implements StorageAdapter {
     this.db!.run('BEGIN TRANSACTION;');
     try {
       const result = await fn(this);
-      this.db!.run('COMMIT;');
+      try {
+        this.db!.run('COMMIT;');
+      } catch (commitError) {
+        const message = commitError instanceof Error ? commitError.message : String(commitError);
+        if (!message.includes('no transaction is active')) {
+          throw commitError;
+        }
+      }
       await this.persistIfNeeded();
       return result;
     } catch (error) {
-      this.db!.run('ROLLBACK;');
+      try {
+        this.db!.run('ROLLBACK;');
+      } catch (rollbackError) {
+        const message =
+          rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+
+        // SQL.js may auto-close the transaction during certain DDL failures.
+        // Preserve the original error instead of masking it with a rollback error.
+        if (!message.includes('no transaction is active')) {
+          throw rollbackError;
+        }
+      }
       throw error;
     }
   }
