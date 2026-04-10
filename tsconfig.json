@@ -3,6 +3,7 @@
     "composite": true,
     "rootDir": "src",
     "baseUrl": "./src",
+    "ignoreDeprecations": "6.0",
     "outDir": "dist",
     "target": "ES2020",
     "module": "ESNext",
