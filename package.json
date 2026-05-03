@@ -73,7 +73,13 @@
     "fallback",
     "webassembly",
     "pwa",
-    "offline-first"
+    "offline-first",
+    "agentos",
+    "framers-agentos",
+    "ai-agent-storage",
+    "agent-memory-storage",
+    "framers",
+    "frame-dev"
   ],
   "author": "Framers (https://frame.dev)",
   "license": "MIT",
