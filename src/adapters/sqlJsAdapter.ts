@@ -131,7 +131,15 @@ export class SqlJsAdapter implements StorageAdapter {
   public async exec(script: string): Promise<void> {
     this.ensureOpen();
     this.db!.exec(script);
-    await this.persistIfNeeded();
+    // sql.js's `db.export()` closes any open transaction as a side
+    // effect — calling persistIfNeeded after a BEGIN/SAVEPOINT would
+    // immediately drop the transaction and make the matching COMMIT
+    // throw "no transaction is active". Skip persistence for
+    // transaction-control statements; the eventual COMMIT path (or
+    // any subsequent write inside the tx) re-runs persistence then.
+    if (!isTransactionControlStatement(script)) {
+      await this.persistIfNeeded();
+    }
   }
 
   public async transaction<T>(fn: (trx: StorageAdapter) => Promise<T>): Promise<T> {
@@ -199,3 +207,32 @@ export class SqlJsAdapter implements StorageAdapter {
 }
 
 export const createSqlJsAdapter = (options?: SqlJsAdapterOptions): StorageAdapter => new SqlJsAdapter(options);
+
+/**
+ * Return true when `script` is purely a transaction-control statement
+ * (BEGIN, SAVEPOINT, COMMIT, ROLLBACK, RELEASE). Used by `exec()` to
+ * skip persistence on BEGIN/SAVEPOINT — `db.export()` ends any open
+ * transaction in sql.js, so writing the snapshot mid-transaction
+ * makes the matching COMMIT throw "no transaction is active". Callers
+ * that COMMIT or ROLLBACK explicitly are still safe because the
+ * subsequent write or close-time persistence runs `export()` after the
+ * transaction has already closed.
+ *
+ * Pattern: tolerate leading whitespace, an optional trailing
+ * semicolon, and statement-modifying keywords (BEGIN DEFERRED,
+ * BEGIN IMMEDIATE, BEGIN EXCLUSIVE, BEGIN TRANSACTION, RELEASE
+ * SAVEPOINT, ROLLBACK TO SAVEPOINT). Anything more complex falls
+ * through to normal persistence.
+ */
+function isTransactionControlStatement(script: string): boolean {
+  const trimmed = script.trim().replace(/;\s*$/, '').toUpperCase();
+  if (trimmed === 'BEGIN' || trimmed === 'COMMIT' || trimmed === 'ROLLBACK') {
+    return true;
+  }
+  return (
+    /^BEGIN\s+(DEFERRED|IMMEDIATE|EXCLUSIVE|TRANSACTION)$/.test(trimmed) ||
+    /^SAVEPOINT\s+\S+$/.test(trimmed) ||
+    /^RELEASE(\s+SAVEPOINT)?\s+\S+$/.test(trimmed) ||
+    /^ROLLBACK(\s+TO(\s+SAVEPOINT)?)?\s+\S+$/.test(trimmed)
+  );
+}
