@@ -11,6 +11,7 @@ type PoolConfig = import('pg').PoolConfig;
 
 import type { StorageAdapter, StorageCapability, StorageOpenOptions, StorageParameters, StorageRunResult } from '../core/contracts';
 import { normaliseParameters } from '../shared/parameterUtils';
+import { splitSqlStatements } from '../shared/splitSqlStatements';
 
 /**
  * Configuration options for PostgreSQL adapter.
@@ -86,12 +87,6 @@ const prepareStatement = (statement: string, parameters?: StorageParameters): Pr
   }
   return { text: statement, values: [] };
 };
-
-const splitStatements = (script: string): string[] =>
-  script
-    .split(';')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
 
 /**
  * PostgreSQL adapter for production-grade SQL operations.
@@ -331,7 +326,7 @@ export class PostgresAdapter implements StorageAdapter {
 
   public async exec(script: string): Promise<void> {
     const executor = await this.getExecutor();
-    const statements = splitStatements(script);
+    const statements = splitSqlStatements(script);
     for (const text of statements) {
       await executor.query(text);
     }

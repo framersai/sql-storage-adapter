@@ -89,6 +89,40 @@ describe('PostgresAdapter', () => {
     });
   });
 
+  it('exec() does not slice statements at semicolons inside `--` line comments', async () => {
+    // Regression for the prod outage where the foundation_session_npcs
+    // bootstrap DDL was sliced at a `;` inside a line comment, leaving an
+    // unclosed paren and Postgres erroring with 42601 on every API request.
+    const script = `
+      CREATE TABLE foundation_session_npcs (
+        id TEXT PRIMARY KEY,
+        -- comment with a ; embedded that used to slice this DDL in half
+        session_id TEXT NOT NULL
+      );
+      CREATE INDEX idx_session_npcs ON foundation_session_npcs(session_id);
+    `;
+    await withAdapter(async (adapter) => {
+      await adapter.exec(script);
+      const queries = await getQueries();
+      const ddlQueries = queries.filter((entry) =>
+        entry.text.startsWith('CREATE TABLE') || entry.text.startsWith('CREATE INDEX')
+      );
+      expect(ddlQueries).toHaveLength(2);
+
+      const createTable = ddlQueries.find((entry) => entry.text.startsWith('CREATE TABLE'));
+      expect(createTable).toBeDefined();
+      // Balanced parens prove the table DDL wasn't sliced inside the comment.
+      const opens = (createTable!.text.match(/\(/g) ?? []).length;
+      const closes = (createTable!.text.match(/\)/g) ?? []).length;
+      expect(opens).toBe(closes);
+      expect(createTable!.text).toContain('session_id TEXT NOT NULL');
+
+      const createIndex = ddlQueries.find((entry) => entry.text.startsWith('CREATE INDEX'));
+      expect(createIndex).toBeDefined();
+      expect(createIndex!.text).toContain('foundation_session_npcs(session_id)');
+    });
+  });
+
   it('wraps statements in explicit transactions', async () => {
     await withAdapter(async (adapter) => {
       await adapter.transaction(async (trx) => {

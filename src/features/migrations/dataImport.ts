@@ -4,6 +4,7 @@
  */
 
 import type { StorageAdapter } from '../../core/contracts';
+import { splitSqlStatements } from '../../shared/splitSqlStatements';
 import type { ExportedData, TableSchema } from './dataExport';
 
 /**
@@ -171,18 +172,9 @@ export async function importFromSQL(
   let statementsExecuted = 0;
 
   try {
-    // Remove comments first
-    const withoutComments = sqlDump
-      .split('\n')
-      .filter(line => !line.trim().startsWith('--'))
-      .join('\n');
-
-    // Split SQL dump into individual statements
-    // Handle both inline and multi-line statements
-    const statements = withoutComments
-      .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
+    // Comment- and string-aware split so semicolons inside `--`, `/* */`,
+    // quoted strings, or dollar-quoted bodies do not slice statements.
+    const statements = splitSqlStatements(sqlDump);
 
     for (const statement of statements) {
       try {

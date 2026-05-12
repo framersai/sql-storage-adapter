@@ -1,3 +1,8 @@
+## [0.6.5] - 2026-05-12
+
+### Fixed
+- **Postgres `exec()` statement splitter is now comment- and string-aware.** The prior splitter called `script.split(';')` with no awareness of `--` line comments, `/* */` block comments, single/double-quoted strings, or `$tag$...$tag$` dollar-quoted strings. A migration whose `CREATE TABLE` body included a `--` comment with an embedded `;` would be sliced at the comment's semicolon, leaving an unclosed paren that Postgres rejected with 42601 (`syntax error at end of input`). The new `splitSqlStatements` helper walks the script as a single-pass char state machine and only splits on top-level `;`. `dataImport.importFromSQL` now uses the same splitter, replacing its previous line-comment pre-pass.
+
 ## [0.6.0] - 2026-03-27
 
 ### Added
