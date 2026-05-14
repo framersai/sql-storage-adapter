@@ -182,3 +182,97 @@ describe('SqlJsAdapter', () => {
     await expect(adapter.all('SELECT 1')).rejects.toThrow();
   });
 });
+
+// Separate describe block — these tests use a FILE-BACKED adapter to
+// exercise the `persistIfNeeded` path that the `:memory:` tests above
+// can't reach. Bug fixed in this slice: `run()`'s unconditional
+// persist-after-write called `db.export()` inside an open transaction,
+// which silently committed (or rolled back) the partially-built tx
+// before the matching adapter-level COMMIT / ROLLBACK fired. File-
+// backed tests are required to reproduce because persistIfNeeded
+// is a no-op when no filePath is set.
+describe('SqlJsAdapter — file-backed transaction semantics', () => {
+  let SqlJsAdapter: typeof import('../src/adapters/sqlJsAdapter.js').SqlJsAdapter;
+  let adapter: InstanceType<typeof SqlJsAdapter>;
+  let tmpFile: string;
+
+  beforeEach(async () => {
+    const { default: pathMod } = await import('node:path');
+    const { default: osMod } = await import('node:os');
+    tmpFile = pathMod.join(
+      osMod.tmpdir(),
+      `sqljs-adapter-tx-${process.pid}-${Math.random().toString(36).slice(2)}.sqlite`,
+    );
+    const mod = await import('../src/adapters/sqlJsAdapter.js');
+    SqlJsAdapter = mod.SqlJsAdapter;
+    adapter = new SqlJsAdapter();
+    await adapter.open({ filePath: tmpFile });
+    await adapter.exec('CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT NOT NULL)');
+  });
+
+  afterEach(async () => {
+    try { await adapter.close(); } catch { /* already closed */ }
+    const { promises: fsp } = await import('node:fs');
+    await fsp.rm(tmpFile, { force: true }).catch(() => {});
+  });
+
+  it('transaction(fn) rolls back inserts when fn throws (file-backed)', async () => {
+    // Pre-fix: adapter.run() inside fn() persists each INSERT via
+    // db.export(), which closes the tx at the SQLite level. The
+    // matching ROLLBACK in the catch path fires against an already-
+    // closed tx and is silently swallowed by the adapter's COMMIT-
+    // failure tolerance. Net result: the row stays in-memory AND on
+    // disk. This test asserts a real rollback semantic.
+    try {
+      await adapter.transaction(async (trx) => {
+        await trx.run('INSERT INTO t (v) VALUES (?)', ['should-rollback']);
+        throw new Error('boom');
+      });
+    } catch {
+      /* expected */
+    }
+    const rows = await adapter.all('SELECT * FROM t');
+    expect(rows).toHaveLength(0);
+  });
+
+  it('transaction(fn) commits and persists writes (file-backed)', async () => {
+    await adapter.transaction(async (trx) => {
+      await trx.run('INSERT INTO t (v) VALUES (?)', ['a']);
+      await trx.run('INSERT INTO t (v) VALUES (?)', ['b']);
+    });
+    // Close + reopen to confirm the writes hit disk.
+    await adapter.close();
+    const reopen = new SqlJsAdapter();
+    await reopen.open({ filePath: tmpFile });
+    const rows = await reopen.all<{ v: string }>('SELECT v FROM t ORDER BY id');
+    expect(rows.map((r) => r.v)).toEqual(['a', 'b']);
+    await reopen.close();
+  });
+
+  it('manual BEGIN/COMMIT via adapter.run() commits + persists (staff-ticket usage)', async () => {
+    // Mirrors how the wilds-ai staff-ticket-store wraps multi-writes.
+    await adapter.run('BEGIN TRANSACTION');
+    await adapter.run('INSERT INTO t (v) VALUES (?)', ['x']);
+    await adapter.run('INSERT INTO t (v) VALUES (?)', ['y']);
+    await adapter.run('COMMIT');
+    // Reopen from disk to verify persistence.
+    await adapter.close();
+    const reopen = new SqlJsAdapter();
+    await reopen.open({ filePath: tmpFile });
+    const rows = await reopen.all<{ v: string }>('SELECT v FROM t ORDER BY id');
+    expect(rows.map((r) => r.v)).toEqual(['x', 'y']);
+    await reopen.close();
+  });
+
+  it('manual BEGIN/INSERT/ROLLBACK via adapter.run() leaves no rows behind', async () => {
+    await adapter.run('BEGIN TRANSACTION');
+    await adapter.run('INSERT INTO t (v) VALUES (?)', ['nope']);
+    await adapter.run('ROLLBACK');
+    await adapter.close();
+    const reopen = new SqlJsAdapter();
+    await reopen.open({ filePath: tmpFile });
+    const rows = await reopen.all('SELECT * FROM t');
+    expect(rows).toHaveLength(0);
+    await reopen.close();
+  });
+});

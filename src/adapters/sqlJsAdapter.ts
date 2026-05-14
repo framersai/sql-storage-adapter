@@ -52,6 +52,23 @@ export class SqlJsAdapter implements StorageAdapter {
   private SQL: SqlJsStatic | null = null;
   private db: SqlJsDatabase | null = null;
   private filePath?: string;
+  /**
+   * Open transaction depth. > 0 means a SQLite-level transaction is in
+   * flight on this connection and {@link persistIfNeeded} MUST be
+   * skipped until the outermost commit / rollback returns.
+   *
+   * Why this exists: sql.js's `db.export()` (called by persistIfNeeded
+   * to flush state to disk) ends any open transaction as a side
+   * effect. Persisting mid-transaction therefore SILENTLY closes the
+   * tx, making subsequent COMMIT / ROLLBACK throw "no transaction is
+   * active" and — worse — leaking partial writes onto disk that the
+   * matching rollback can no longer undo. Counter is bumped on
+   * BEGIN/SAVEPOINT and decremented on COMMIT/RELEASE/ROLLBACK
+   * regardless of whether the statement is issued via {@link run}
+   * (caller-managed transactions) or {@link transaction} (helper-
+   * managed). One source of truth for the in-tx flag.
+   */
+  private transactionDepth = 0;
 
   constructor(private readonly adapterOptions: SqlJsAdapterOptions = {}) {
     const caps: StorageCapability[] = ['transactions', 'json', 'prepared'];
@@ -78,6 +95,17 @@ export class SqlJsAdapter implements StorageAdapter {
   }
 
   public async run(statement: string, parameters?: StorageParameters): Promise<StorageRunResult> {
+    // Detect caller-managed transaction control (BEGIN / SAVEPOINT /
+    // COMMIT / ROLLBACK / RELEASE) so we can keep the tx depth in
+    // sync regardless of whether the caller uses {@link transaction}
+    // or issues control statements directly. Bump BEFORE execute on
+    // BEGIN-shaped statements; decrement AFTER on COMMIT-shaped ones
+    // so the persist gate in the finally block sees the correct
+    // post-statement depth.
+    const txKind = classifyTransactionControl(statement);
+    if (txKind === 'begin') {
+      this.transactionDepth += 1;
+    }
     const stmt = this.prepareInternal(statement);
     try {
       const { named, positional } = normaliseParameters(parameters);
@@ -93,9 +121,26 @@ export class SqlJsAdapter implements StorageAdapter {
         changes: this.db!.getRowsModified(),
         lastInsertRowid: normaliseRowId(rawRowId)
       };
+    } catch (err) {
+      // If the BEGIN-shaped statement itself failed (e.g. nested
+      // BEGIN in single-tx mode), undo the depth bump so the
+      // adapter doesn't get stuck thinking it's in a tx.
+      if (txKind === 'begin') {
+        this.transactionDepth = Math.max(0, this.transactionDepth - 1);
+      }
+      throw err;
     } finally {
       stmt.free();
-      await this.persistIfNeeded();
+      if (txKind === 'end' && this.transactionDepth > 0) {
+        this.transactionDepth -= 1;
+      }
+      // Persist only when we are NOT inside an open transaction. This
+      // is the load-bearing rule: a mid-tx db.export() would close
+      // the tx at the SQLite level and silently lose every
+      // uncommitted write up to that point.
+      if (this.transactionDepth === 0) {
+        await this.persistIfNeeded();
+      }
     }
   }
 
@@ -130,47 +175,76 @@ export class SqlJsAdapter implements StorageAdapter {
 
   public async exec(script: string): Promise<void> {
     this.ensureOpen();
-    this.db!.exec(script);
-    // sql.js's `db.export()` closes any open transaction as a side
-    // effect — calling persistIfNeeded after a BEGIN/SAVEPOINT would
-    // immediately drop the transaction and make the matching COMMIT
-    // throw "no transaction is active". Skip persistence for
-    // transaction-control statements; the eventual COMMIT path (or
-    // any subsequent write inside the tx) re-runs persistence then.
-    if (!isTransactionControlStatement(script)) {
+    // `exec()` accepts multi-statement scripts so we can't reliably
+    // classify the transactional intent the way {@link run} does.
+    // Keep the original "skip persist on transaction-control" guard
+    // for single-statement BEGIN/COMMIT calls AND additionally skip
+    // when we're already known to be in a tx (depth > 0) — that case
+    // covers `exec('CREATE TABLE …')` inside a {@link transaction}
+    // block where the script itself isn't transaction-control but
+    // persisting would still close the open tx.
+    const isControl = isTransactionControlStatement(script);
+    const txKind = isControl ? classifyTransactionControl(script) : 'none';
+    if (txKind === 'begin') {
+      this.transactionDepth += 1;
+    }
+    try {
+      this.db!.exec(script);
+    } catch (err) {
+      if (txKind === 'begin') {
+        this.transactionDepth = Math.max(0, this.transactionDepth - 1);
+      }
+      throw err;
+    }
+    if (txKind === 'end' && this.transactionDepth > 0) {
+      this.transactionDepth -= 1;
+    }
+    if (!isControl && this.transactionDepth === 0) {
+      await this.persistIfNeeded();
+    } else if (txKind === 'end' && this.transactionDepth === 0) {
+      // Just exited the outermost transaction — flush to disk.
       await this.persistIfNeeded();
     }
   }
 
   public async transaction<T>(fn: (trx: StorageAdapter) => Promise<T>): Promise<T> {
     this.ensureOpen();
+    // BEGIN goes through raw sql.js (`this.db!.run`) to avoid the
+    // adapter-level run() pre-bump + persist-skip machinery — we
+    // manage the depth flag explicitly here so the inner fn()'s
+    // adapter.run() calls correctly see depth > 0 and skip persist.
     this.db!.run('BEGIN TRANSACTION;');
+    this.transactionDepth += 1;
+    let committed = false;
     try {
       const result = await fn(this);
-      try {
-        this.db!.run('COMMIT;');
-      } catch (commitError) {
-        const message = commitError instanceof Error ? commitError.message : String(commitError);
-        if (!message.includes('no transaction is active')) {
-          throw commitError;
-        }
-      }
-      await this.persistIfNeeded();
+      this.db!.run('COMMIT;');
+      committed = true;
       return result;
     } catch (error) {
-      try {
-        this.db!.run('ROLLBACK;');
-      } catch (rollbackError) {
-        const message =
-          rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-
-        // SQL.js may auto-close the transaction during certain DDL failures.
-        // Preserve the original error instead of masking it with a rollback error.
-        if (!message.includes('no transaction is active')) {
-          throw rollbackError;
+      if (!committed) {
+        try {
+          this.db!.run('ROLLBACK;');
+        } catch (rollbackError) {
+          const message =
+            rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          // SQL.js may auto-close the transaction during certain DDL
+          // failures. Preserve the original error rather than mask it
+          // with a rollback hiccup.
+          if (!message.includes('no transaction is active')) {
+            throw rollbackError;
+          }
         }
       }
       throw error;
+    } finally {
+      this.transactionDepth = Math.max(0, this.transactionDepth - 1);
+      // Only the outermost transaction triggers a flush to disk —
+      // nested savepoints inside would keep depth > 0 and rely on
+      // the eventual outer COMMIT to land.
+      if (this.transactionDepth === 0) {
+        await this.persistIfNeeded();
+      }
     }
   }
 
@@ -225,14 +299,34 @@ export const createSqlJsAdapter = (options?: SqlJsAdapterOptions): StorageAdapte
  * through to normal persistence.
  */
 function isTransactionControlStatement(script: string): boolean {
+  return classifyTransactionControl(script) !== 'none';
+}
+
+/**
+ * Narrow classification of transaction-control SQL into the three
+ * categories the persistence gate needs to react to:
+ *
+ *   - `'begin'` — BEGIN / BEGIN DEFERRED|IMMEDIATE|EXCLUSIVE / BEGIN
+ *     TRANSACTION / SAVEPOINT <name>. Bumps depth before execution.
+ *   - `'end'`   — COMMIT / ROLLBACK / ROLLBACK TO [SAVEPOINT] <name> /
+ *     RELEASE [SAVEPOINT] <name>. Decrements depth after execution.
+ *   - `'none'`  — any other statement; depth is unaffected.
+ *
+ * Pattern tolerates leading whitespace, an optional trailing
+ * semicolon, and the SQLite-specific modifiers
+ * (`BEGIN DEFERRED|IMMEDIATE|EXCLUSIVE`, `BEGIN TRANSACTION`,
+ * `RELEASE SAVEPOINT`, `ROLLBACK TO SAVEPOINT`). Anything more
+ * complex falls through to `'none'` — callers issuing multi-statement
+ * scripts via {@link exec} are responsible for not mixing
+ * transaction-control with other DML in a single call.
+ */
+function classifyTransactionControl(script: string): 'begin' | 'end' | 'none' {
   const trimmed = script.trim().replace(/;\s*$/, '').toUpperCase();
-  if (trimmed === 'BEGIN' || trimmed === 'COMMIT' || trimmed === 'ROLLBACK') {
-    return true;
-  }
-  return (
-    /^BEGIN\s+(DEFERRED|IMMEDIATE|EXCLUSIVE|TRANSACTION)$/.test(trimmed) ||
-    /^SAVEPOINT\s+\S+$/.test(trimmed) ||
-    /^RELEASE(\s+SAVEPOINT)?\s+\S+$/.test(trimmed) ||
-    /^ROLLBACK(\s+TO(\s+SAVEPOINT)?)?\s+\S+$/.test(trimmed)
-  );
+  if (trimmed === 'BEGIN') return 'begin';
+  if (trimmed === 'COMMIT' || trimmed === 'ROLLBACK') return 'end';
+  if (/^BEGIN\s+(DEFERRED|IMMEDIATE|EXCLUSIVE|TRANSACTION)$/.test(trimmed)) return 'begin';
+  if (/^SAVEPOINT\s+\S+$/.test(trimmed)) return 'begin';
+  if (/^RELEASE(\s+SAVEPOINT)?\s+\S+$/.test(trimmed)) return 'end';
+  if (/^ROLLBACK(\s+TO(\s+SAVEPOINT)?)?\s+\S+$/.test(trimmed)) return 'end';
+  return 'none';
 }
